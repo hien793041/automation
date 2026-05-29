@@ -1,0 +1,7 @@
+{
+  "type": "gaussian",
+  "mu": 2.5,
+  "sigma": 0.8,
+  "unit": "px/ms^3",
+  "source": "human_recording_avg"
+}

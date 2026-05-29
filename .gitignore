@@ -1,0 +1,68 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+share/python-wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# Virtual environments
+.venv
+env/
+venv/
+ENV/
+env.bak/
+venv.bak/
+
+# PyCharm / VSCode
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# Model weights
+*.pt
+*.onnx
+*.pth
+*.ckpt
+
+# Data (keep structure, ignore contents)
+data/human_recordings/*/
+!data/human_recordings/.gitkeep
+data/bot_telemetry/*/
+!data/bot_telemetry/.gitkeep
+
+# Logs
+*.log
+
+# Jupyter
+.ipynb_checkpoints
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Rust
+target/
+Cargo.lock
+*.rlib
+*.dll
+*.so
+*.dylib

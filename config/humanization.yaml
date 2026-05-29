@@ -1,0 +1,38 @@
+# Humanization engine parameters
+timing:
+  reaction_time:
+    type: gaussian
+    mu: 350.0
+    sigma: 80.0
+  click_interval:
+    type: log_normal
+    shape: 0.8
+    scale: 1.2
+  decision_time:
+    type: gaussian
+    mu: 600.0
+    sigma: 200.0
+  break_duration:
+    type: exponential
+    lambda: 0.004
+
+movement:
+  fitts_a: 100.0
+  fitts_b: 50.0
+  control_offset_ratio: 0.10
+  step_ms: 10.0
+  jitter_sigma: 1.5
+
+decision:
+  fatigue_half_life_hours: 2.0
+  base_distraction_rate: 0.08
+  base_misclick_rate: 0.01
+
+session:
+  short_session_mu: 1.5
+  short_session_sigma: 0.3
+  long_session_mu: 5.0
+  long_session_sigma: 0.8
+  short_session_weight: 0.6
+  break_lambda_hours: 2.0
+  min_break_minutes: 5.0

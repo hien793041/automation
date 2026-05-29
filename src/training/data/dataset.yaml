@@ -1,0 +1,19 @@
+# YOLO dataset configuration
+path: src/training/data
+train: annotated/train/images
+val: annotated/val/images
+test: annotated/test/images
+
+nc: 50
+names:
+  0: gather_btn
+  1: march_btn
+  2: attack_btn
+  3: icon_marching
+  4: icon_gathering
+  5: connection_lost
+  6: captcha
+  7: vip_popup
+  8: close_btn
+  9: back_btn
+  # ... extend to 50 classes

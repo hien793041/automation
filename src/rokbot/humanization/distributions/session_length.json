@@ -1,0 +1,18 @@
+{
+  "type": "bimodal_gaussian",
+  "components": [
+    {
+      "weight": 0.6,
+      "mu": 1.5,
+      "sigma": 0.3,
+      "unit": "hours"
+    },
+    {
+      "weight": 0.4,
+      "mu": 5.0,
+      "sigma": 0.8,
+      "unit": "hours"
+    }
+  ],
+  "source": "human_recording_avg"
+}

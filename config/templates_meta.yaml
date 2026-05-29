@@ -1,0 +1,14 @@
+# Template metadata
+templates:
+  - name: gather_button
+    path: common_ui/gather_button.png
+    region: center_dialog
+    threshold: 0.80
+  - name: march_button
+    path: common_ui/march_button.png
+    region: center_dialog
+    threshold: 0.80
+  - name: connection_lost
+    path: error_states/connection_lost.png
+    region: center_dialog
+    threshold: 0.90

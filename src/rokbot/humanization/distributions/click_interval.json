@@ -1,0 +1,7 @@
+{
+  "type": "log_normal",
+  "shape": 0.8,
+  "scale": 1.2,
+  "unit": "ms",
+  "source": "human_recording_avg"
+}

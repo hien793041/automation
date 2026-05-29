@@ -1,0 +1,6 @@
+{
+  "type": "poisson",
+  "lambda": 2.0,
+  "unit": "hours",
+  "source": "human_recording_avg"
+}
