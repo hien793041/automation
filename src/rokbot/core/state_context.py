@@ -94,6 +94,10 @@ class StateContext:
         """Return last N state names."""
         return [r.state for r in self._history[-n:]]
 
+    def reset_stuck_timer(self) -> None:
+        """Reset the stuck timer so idle periods don't trigger false positives."""
+        self._state_start_time = datetime.utcnow()
+
     def reset_retries(self, state: Optional[str] = None) -> None:
         """Reset retry counts."""
         if state is None:

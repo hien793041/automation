@@ -1,7 +1,9 @@
 """State machine orchestrator for ROK Bot Engine v2."""
 
+import random
 import time
 from enum import Enum, auto
+from pathlib import Path
 from typing import Callable, Dict, List, Optional
 
 from loguru import logger
@@ -11,6 +13,7 @@ from rokbot.core.config import BotConfig
 from rokbot.core.exceptions import RecoveryError, StuckError
 from rokbot.core.state_context import StateContext
 from rokbot.core.state_transitions import TransitionRegistry, TransitionRule
+from rokbot.vision.template_matcher import TemplateMatcher
 
 
 class BotState(Enum):
@@ -49,6 +52,10 @@ class StateMachine:
         self.screen_capture = screen_capture
         self.ocr_engine = ocr_engine
         self._actions = self._load_actions()
+        self._chat_matcher = TemplateMatcher(
+            templates_dir=Path("data/templates"),
+            threshold=0.75,
+        )
 
     def _load_actions(self):
         """Load enabled actions from the factory."""
@@ -100,6 +107,9 @@ class StateMachine:
         """Single state machine tick."""
         current_state = self.context.current_state or BotState.UNKNOWN.name
 
+        # Dismiss blocking overlays (chat, guides, etc.)
+        self._dismiss_overlays()
+
         # Check stuck condition
         if self.context.is_stuck(self.config.stuck_threshold_seconds):
             raise StuckError(f"Stuck in {current_state} for {self.context.time_in_current_state():.0f}s")
@@ -130,6 +140,7 @@ class StateMachine:
                     success = action.execute()
                     if success:
                         action.on_success()
+                        self.context.reset_stuck_timer()
                     else:
                         action.on_failure("Execution returned False")
                     # Only run one action per tick
@@ -137,6 +148,28 @@ class StateMachine:
             except Exception as e:
                 logger.exception(f"Action {action_name} failed: {e}")
                 action.on_failure(str(e))
+
+    def _dismiss_overlays(self) -> None:
+        """Close chat/guide windows if detected."""
+        if self.screen_capture is None or self.pc_input is None:
+            return
+        image = self.screen_capture.capture()
+        if image is None:
+            return
+
+        for template_name, label in [("close_chat", "chat"), ("guide_close", "guide")]:
+            matches = self._chat_matcher.match(image, template_name=template_name)
+            if matches:
+                best = max(matches, key=lambda m: m.confidence)
+                bx1, by1, bx2, by2 = best.bbox
+                cx = random.randint(bx1, max(bx1, bx2 - 1))
+                cy = random.randint(by1, max(by1, by2 - 1))
+                logger.info(f"[StateMachine] Closing {label} at ({cx}, {cy}) conf={best.confidence:.2f}")
+                self.pc_input.move_to_safe_zone()
+                self.pc_input.tap(cx, cy)
+                time.sleep(random.uniform(0.5, 1.0))
+                # Only dismiss one overlay per tick to avoid mis-clicks
+                break
 
     def _infer_next_state(self) -> Optional[str]:
         """Infer next state from detections (placeholder)."""

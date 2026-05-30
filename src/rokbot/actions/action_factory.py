@@ -5,6 +5,8 @@ from typing import TYPE_CHECKING, Dict, Optional, Type
 from loguru import logger
 
 from rokbot.actions.alliance_help_action import AllianceHelpAction
+from rokbot.actions.barbarian_attack_action import BarbarianAttackAction
+from rokbot.actions.combo_scout_train_action import ComboScoutTrainAction
 from rokbot.actions.base_action import BaseAction
 from rokbot.actions.gather_action import GatherAction
 from rokbot.actions.reconnect_action import ReconnectAction
@@ -22,8 +24,10 @@ class ActionFactory:
     _registry: Dict[str, Type[BaseAction]] = {
         "gather": GatherAction,
         "alliance_help": AllianceHelpAction,
+        "barbarian_attack": BarbarianAttackAction,
         "scout": ScoutAction,
         "train_troops": TrainTroopsAction,
+        "combo_scout_train": ComboScoutTrainAction,
         "reconnect": ReconnectAction,
     }
 

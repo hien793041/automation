@@ -137,7 +137,9 @@ class ScoutAction(BaseAction):
 
         city_state = self._detect_city_state(image)
         if city_state == "unknown":
-            logger.debug("Cannot determine city/world state — skipping scout")
+            logger.warning("[Scout] Unknown city/world state — pressing ESC to dismiss popup")
+            self.state_machine.pc_input.key_back()
+            time.sleep(random.uniform(1.0, 2.0))
             return False
 
         if city_state == "in_world":
@@ -180,6 +182,9 @@ class ScoutAction(BaseAction):
             self.state_machine.pc_input.move_to_safe_zone()
             image = self.state_machine.screen_capture.capture()
         elif city_state == "unknown":
+            logger.warning("[Scout] Unknown city/world state — pressing ESC to dismiss popup")
+            self.state_machine.pc_input.key_back()
+            time.sleep(random.uniform(1.0, 2.0))
             self.on_failure("Could not determine city/world state")
             return False
         if image is None:

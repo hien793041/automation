@@ -17,6 +17,10 @@ actions:
     enabled: false
     priority: 4
     timeout_seconds: 15.0
+  combo_scout_train:
+    enabled: true
+    priority: 3
+    timeout_seconds: 30.0
   reconnect:
     enabled: false
     priority: 0

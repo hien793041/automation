@@ -1,9 +1,9 @@
 # Main bot configuration
 project_name: rok-bot-engine
 log_level: INFO
-screenshot_interval_seconds: 1.0
+screenshot_interval_seconds: 2.0
 max_retry_attempts: 3
-stuck_threshold_seconds: 60.0
+stuck_threshold_seconds: 3600.0
 
 vision:
   yolo_model_path: models/yolo/rok_ui_v8.pt
