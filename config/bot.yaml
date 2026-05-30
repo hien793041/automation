@@ -11,7 +11,7 @@ vision:
   labels_path: models/yolo/labels.yaml
   confidence_threshold: 0.5
   iou_threshold: 0.45
-  ocr_lang: en
+  ocr_lang: eng+vie
   template_fallback: true
 
 humanization:
@@ -25,6 +25,12 @@ humanization:
   base_distraction_rate: 0.08
   base_misclick_rate: 0.01
 
+pc:
+  window_title: "Rise of Kingdoms"
+  # Uncomment and adjust if your game window title is different (e.g., Vietnamese locale)
+  # window_title: "Rise of Kingdoms"
+
+# Emulator config kept for backward compatibility but not used in PC mode
 emulator:
   adb_host: 127.0.0.1
   adb_port: 5555
@@ -36,8 +42,8 @@ actions:
   enabled_actions:
     - gather
     - alliance_help
-    - daily_quest
     - scout
     - train_troops
+    - reconnect
   priorities: {}
   default_timeout_seconds: 30.0

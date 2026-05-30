@@ -1,14 +1,18 @@
 """Resource gathering action."""
 
+from typing import TYPE_CHECKING, Optional
+
 from rokbot.actions.base_action import BaseAction
 from rokbot.core.config import BotConfig
-from rokbot.core.state_machine import StateMachine
+
+if TYPE_CHECKING:
+    from rokbot.core.state_machine import StateMachine
 
 
 class GatherAction(BaseAction):
     """Action to send troops to gather resources."""
 
-    def __init__(self, config: BotConfig, state_machine: StateMachine):
+    def __init__(self, config: BotConfig, state_machine: Optional["StateMachine"] = None):
         super().__init__(config, state_machine)
 
     def can_execute(self) -> bool:

@@ -14,8 +14,14 @@ class VisionConfig(BaseModel):
     labels_path: Path = Field(default=Path("models/yolo/labels.yaml"))
     confidence_threshold: float = Field(default=0.5, ge=0.0, le=1.0)
     iou_threshold: float = Field(default=0.45, ge=0.0, le=1.0)
-    ocr_lang: str = Field(default="en")
+    ocr_lang: str = Field(default="eng+vie")
     template_fallback: bool = Field(default=True)
+
+
+class PCConfig(BaseModel):
+    """PC game client configuration."""
+
+    window_title: str = Field(default="Rise of Kingdoms")
 
 
 class HumanizationConfig(BaseModel):
@@ -45,7 +51,7 @@ class EmulatorConfig(BaseModel):
 class ActionConfig(BaseModel):
     """Action priority and timeout configuration."""
 
-    enabled_actions: List[str] = Field(default_factory=lambda: ["gather", "alliance_help", "daily_quest", "scout", "train_troops"])
+    enabled_actions: List[str] = Field(default_factory=lambda: ["gather", "alliance_help", "scout", "train_troops", "reconnect"])
     priorities: Dict[str, int] = Field(default_factory=dict)
     default_timeout_seconds: float = Field(default=30.0)
 
@@ -60,5 +66,6 @@ class BotConfig(BaseModel):
     stuck_threshold_seconds: float = Field(default=60.0)
     vision: VisionConfig = Field(default_factory=VisionConfig)
     humanization: HumanizationConfig = Field(default_factory=HumanizationConfig)
+    pc: PCConfig = Field(default_factory=PCConfig)
     emulator: EmulatorConfig = Field(default_factory=EmulatorConfig)
     actions: ActionConfig = Field(default_factory=ActionConfig)

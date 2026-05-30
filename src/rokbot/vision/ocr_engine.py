@@ -1,4 +1,7 @@
-"""PaddleOCR wrapper with ROI targeting and context verification."""
+"""OCR engine for reading UI text and verifying detections.
+
+Uses pytesseract (Tesseract OCR) as the primary engine.
+"""
 
 import re
 from typing import List, Optional, Tuple
@@ -33,26 +36,25 @@ class OCREngine:
         re.compile(r"(\d{1,2}):(\d{2})"),          # MM:SS
     ]
 
-    def __init__(self, lang: str = "en", use_gpu: bool = False):
+    def __init__(self, lang: str = "eng"):
+        """lang: tesseract language code (e.g., 'eng', 'vie', 'eng+vie')."""
         self.lang = lang
-        self.use_gpu = use_gpu
         self._engine = None
         self._load_engine()
 
     def _load_engine(self) -> None:
-        """Lazy-load PaddleOCR engine."""
+        """Lazy-load pytesseract."""
         try:
-            from paddleocr import PaddleOCR
+            import pytesseract
 
-            self._engine = PaddleOCR(
-                use_angle_cls=True,
-                lang=self.lang,
-                use_gpu=self.use_gpu,
-                show_log=False,
-            )
-            logger.info("PaddleOCR engine loaded")
+            # Verify tesseract is accessible
+            pytesseract.get_tesseract_version()
+            self._engine = pytesseract
+            logger.info(f"Tesseract OCR engine loaded (lang={self.lang})")
         except ImportError:
-            logger.error("paddleocr not installed; OCR unavailable")
+            logger.error("pytesseract not installed; OCR unavailable")
+        except Exception as e:
+            logger.error(f"Tesseract failed to load: {e}")
 
     def read(self, image: np.ndarray, roi: Optional[Tuple[int, int, int, int]] = None) -> List[OCRResult]:
         """Read text from image, optionally within an ROI."""
@@ -64,28 +66,56 @@ class OCREngine:
             x1, y1, x2, y2 = roi
             image = image[y1:y2, x1:x2]
 
-        result = self._engine.ocr(image, cls=True)
-        ocr_results: List[OCRResult] = []
+        try:
+            return self._read_tesseract(image, roi)
+        except Exception as e:
+            logger.warning(f"OCR read failed: {e}")
+            return []
 
-        if result is None or result[0] is None:
-            return ocr_results
+    def _read_tesseract(
+        self, image: np.ndarray, roi: Optional[Tuple[int, int, int, int]]
+    ) -> List[OCRResult]:
+        results: List[OCRResult] = []
 
-        for line in result[0]:
-            if line is None:
+        # Tesseract expects RGB or grayscale
+        if len(image.shape) == 3:
+            gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+        else:
+            gray = image
+
+        data = self._engine.image_to_data(
+            gray,
+            lang=self.lang,
+            config='--psm 6',
+            output_type=self._engine.Output.DICT,
+        )
+
+        n_boxes = len(data["text"])
+        for i in range(n_boxes):
+            text = data["text"][i].strip()
+            conf = int(data["conf"][i])
+            if not text or conf <= 0:
                 continue
-            bbox_points, (text, conf) = line
-            pts = np.array(bbox_points, dtype=np.int32)
-            x1, y1 = pts[:, 0].min(), pts[:, 1].min()
-            x2, y2 = pts[:, 0].max(), pts[:, 1].max()
-            if roi is not None:
-                x1 += roi[0]
-                y1 += roi[1]
-                x2 += roi[0]
-                y2 += roi[1]
-            ocr_results.append(OCRResult(text=text, confidence=conf, bbox=(x1, y1, x2, y2)))
 
-        logger.debug(f"OCR read {len(ocr_results)} text blocks")
-        return ocr_results
+            x, y, w, h = data["left"][i], data["top"][i], data["width"][i], data["height"][i]
+            x1, y1, x2, y2 = x, y, x + w, y + h
+            if roi is not None:
+                rx, ry, _, _ = roi
+                x1 += rx
+                y1 += ry
+                x2 += rx
+                y2 += ry
+
+            results.append(
+                OCRResult(
+                    text=text,
+                    confidence=conf / 100.0,
+                    bbox=(x1, y1, x2, y2),
+                )
+            )
+
+        logger.debug(f"OCR read {len(results)} text blocks")
+        return results
 
     def verify_context(
         self,

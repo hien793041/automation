@@ -1,18 +1,20 @@
 """Abstract base class for all bot actions."""
 
 from abc import ABC, abstractmethod
-from typing import Optional
+from typing import TYPE_CHECKING, Optional
 
 from loguru import logger
 
 from rokbot.core.config import BotConfig
-from rokbot.core.state_machine import StateMachine
+
+if TYPE_CHECKING:
+    from rokbot.core.state_machine import StateMachine
 
 
 class BaseAction(ABC):
     """Base class for game actions."""
 
-    def __init__(self, config: BotConfig, state_machine: Optional[StateMachine] = None):
+    def __init__(self, config: BotConfig, state_machine: Optional["StateMachine"] = None):
         self.config = config
         self.state_machine = state_machine
         self.name = self.__class__.__name__

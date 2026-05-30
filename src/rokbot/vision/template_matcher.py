@@ -58,10 +58,13 @@ class TemplateMatcher:
         image: np.ndarray,
         template_name: Optional[str] = None,
         roi: Optional[Tuple[int, int, int, int]] = None,
+        threshold: Optional[float] = None,
     ) -> List[TemplateMatch]:
         """Match templates against an image."""
         if not self._templates:
             return []
+
+        thr = threshold if threshold is not None else self.threshold
 
         if roi is not None:
             x1, y1, x2, y2 = roi
@@ -76,7 +79,13 @@ class TemplateMatcher:
         else:
             search_gray = search_image
 
-        templates = {template_name: self._templates[template_name]} if template_name else self._templates
+        if template_name:
+            if template_name not in self._templates:
+                logger.debug(f"Template '{template_name}' not loaded (file missing)")
+                return []
+            templates = {template_name: self._templates[template_name]}
+        else:
+            templates = self._templates
         matches: List[TemplateMatch] = []
 
         for name, template in templates.items():
@@ -85,7 +94,9 @@ class TemplateMatcher:
             result = cv2.matchTemplate(search_gray, template, cv2.TM_CCOEFF_NORMED)
             min_val, max_val, min_loc, max_loc = cv2.minMaxLoc(result)
 
-            if max_val >= self.threshold:
+            logger.debug(f"Template '{name}' best confidence = {max_val:.3f} (threshold={thr})")
+
+            if max_val >= thr:
                 h, w = template.shape[:2]
                 top_left = (max_loc[0] + offset_x, max_loc[1] + offset_y)
                 bbox = (top_left[0], top_left[1], top_left[0] + w, top_left[1] + h)

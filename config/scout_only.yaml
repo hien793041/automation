@@ -1,0 +1,5 @@
+actions:
+  scout:
+    enabled: true
+    priority: 1
+    timeout_seconds: 20.0
