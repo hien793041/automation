@@ -5,12 +5,16 @@
 
 combos:
   my_combo:
+    - reconnect
     - villager_help
     - scout
     - alliance_help
+    - gather
     - train_troops
   my_combo2:
     - scout
     - alliance_help
     # - train_troops
     - barbarian_attack
+  my_combo3:
+    - gather
