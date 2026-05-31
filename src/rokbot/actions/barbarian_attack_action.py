@@ -120,8 +120,8 @@ class BarbarianAttackAction(BaseAction):
             return False
 
         if city_state == "in_city":
-            logger.debug("[Barbarian] can_execute: in city — need world map")
-            return False
+            logger.info("[Barbarian] In city — will switch to world map in execute()")
+            return True
 
         # In world — check troops_available first
         avail_matches = self._matcher.match(image, template_name="troops_available", threshold=0.80)
@@ -178,6 +178,18 @@ class BarbarianAttackAction(BaseAction):
             self.on_failure("Screenshot failed after world transition")
             return False
 
+        # 0. Verify troops are available before attacking
+        self.state_machine.pc_input.move_to_safe_zone()
+        verify_image = self.state_machine.screen_capture.capture()
+        if verify_image is None:
+            return False
+        avail_matches = self._matcher.match(verify_image, template_name="troops_available", threshold=0.80)
+        if not avail_matches:
+            logger.info("[Barbarian] Step 0/7: troops_available not found — passing")
+            return False
+        avail_btn = max(avail_matches, key=lambda m: m.confidence)
+        logger.info(f"[Barbarian] Step 0/7: troops_available confirmed conf={avail_btn.confidence:.2f}")
+
         # 1. Tap "Find" button on world map
         find_matches = self._matcher.match(image, template_name="world_find_btn", threshold=0.80)
         if not find_matches:
@@ -185,7 +197,7 @@ class BarbarianAttackAction(BaseAction):
             return False
         find_btn = max(find_matches, key=lambda m: m.confidence)
         fx, fy = self._random_point_in_bbox(find_btn.bbox)
-        logger.info(f"[Barbarian] Step 1/5: Tapping 'Find' on world map at ({fx}, {fy})")
+        logger.info(f"[Barbarian] Step 1/7: Tapping 'Find' on world map at ({fx}, {fy})")
         self.state_machine.pc_input.tap(fx, fy)
         time.sleep(random.uniform(1.0, 3.0))
 
@@ -200,7 +212,7 @@ class BarbarianAttackAction(BaseAction):
             return False
         select_btn = max(select_matches, key=lambda m: m.confidence)
         sx, sy = self._random_point_in_bbox(select_btn.bbox)
-        logger.info(f"[Barbarian] Step 2/5: Tapping 'Select Barbarian' at ({sx}, {sy})")
+        logger.info(f"[Barbarian] Step 2/7: Tapping 'Select Barbarian' at ({sx}, {sy})")
         self.state_machine.pc_input.tap(sx, sy)
         time.sleep(random.uniform(1.0, 3.0))
 
@@ -215,9 +227,9 @@ class BarbarianAttackAction(BaseAction):
             return False
         menu_find_btn = max(menu_find_matches, key=lambda m: m.confidence)
         mfx, mfy = self._random_point_in_bbox(menu_find_btn.bbox)
-        logger.info(f"[Barbarian] Step 3/5: Tapping 'Find' in menu at ({mfx}, {mfy})")
+        logger.info(f"[Barbarian] Step 3/7: Tapping 'Find' in menu at ({mfx}, {mfy})")
         self.state_machine.pc_input.tap(mfx, mfy)
-        time.sleep(random.uniform(1.0, 3.0))
+        time.sleep(random.uniform(1.8, 2.2))
 
         # 4. Tap Attack button on the barbarian popup
         self.state_machine.pc_input.move_to_safe_zone()
@@ -230,11 +242,26 @@ class BarbarianAttackAction(BaseAction):
             return False
         attack_btn = max(attack_matches, key=lambda m: m.confidence)
         ax, ay = self._random_point_in_bbox(attack_btn.bbox)
-        logger.info(f"[Barbarian] Step 4/5: Tapping 'Attack' at ({ax}, {ay})")
+        logger.info(f"[Barbarian] Step 4/7: Tapping 'Attack' at ({ax}, {ay})")
         self.state_machine.pc_input.tap(ax, ay)
         time.sleep(random.uniform(1.0, 3.0))
 
-        # 5. Use existing troops (pre-configured)
+        # 5. Choose troop attack
+        self.state_machine.pc_input.move_to_safe_zone()
+        choose_image = self.state_machine.screen_capture.capture()
+        if choose_image is None:
+            return False
+        choose_matches = self._matcher.match(choose_image, template_name="choose_troop_attack", threshold=0.80)
+        if not choose_matches:
+            logger.info("[Barbarian] choose_troop_attack not found")
+            return False
+        choose_btn = max(choose_matches, key=lambda m: m.confidence)
+        chx, chy = self._random_point_in_bbox(choose_btn.bbox)
+        logger.info(f"[Barbarian] Step 5/7: Tapping 'Choose Troop Attack' at ({chx}, {chy})")
+        self.state_machine.pc_input.tap(chx, chy)
+        time.sleep(random.uniform(1.0, 3.0))
+
+        # 6. Use existing troops (pre-configured)
         self.state_machine.pc_input.move_to_safe_zone()
         troop_image = self.state_machine.screen_capture.capture()
         if troop_image is None:
@@ -244,7 +271,7 @@ class BarbarianAttackAction(BaseAction):
         if existing_matches:
             existing_btn = max(existing_matches, key=lambda m: m.confidence)
             ex, ey = self._random_point_in_bbox(existing_btn.bbox)
-            logger.info(f"[Barbarian] Step 5/5: Tapping 'Existing Troops' at ({ex}, {ey})")
+            logger.info(f"[Barbarian] Step 6/7: Tapping 'Existing Troops' at ({ex}, {ey})")
             self.state_machine.pc_input.tap(ex, ey)
             time.sleep(random.uniform(1.0, 3.0))
             return True

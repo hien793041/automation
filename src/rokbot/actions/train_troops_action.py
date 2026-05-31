@@ -28,6 +28,7 @@ class TrainTroopsAction(BaseAction):
 
     COMPLETED_ICONS = ["t1_bo_completed", "t1_cung_completed", "t1_da_completed", "t1_ngua_completed"]
     TRAIN_ICONS = ["bo_train", "cung_train", "da_train", "ngua_train"]
+    AVAIL_TEMPLATES = ["train_available", "train_available1", "train_available2"]
 
     def __init__(self, config: BotConfig, state_machine: Optional["StateMachine"] = None):
         super().__init__(config, state_machine)
@@ -39,6 +40,11 @@ class TrainTroopsAction(BaseAction):
             templates_dir=self.SHARED_TEMPLATES_DIR,
             threshold=0.80,
         )
+        self._tab_matcher = TemplateMatcher(
+            templates_dir=self.SHARED_TEMPLATES_DIR,
+            threshold=0.75,
+        )
+
         self._timing = TimingEngine(
             profile_path=config.humanization.profile_path
             if config.humanization.profile_path and config.humanization.profile_path.exists()
@@ -107,6 +113,41 @@ class TrainTroopsAction(BaseAction):
 
         return "unknown"
 
+    def _open_tongquan_and_get_idle_bbox(self, image: np.ndarray) -> Optional[Tuple[int, int, int, int]]:
+        """Open the 'Tong Quan' tab if needed and look for 'khong_hoat_dong_text.png'.
+
+        Returns the bounding box of the text template if found.
+        """
+        # Check if tab is already open
+        opened_matches = self._tab_matcher.match(image, template_name="tongquan_opened", threshold=0.75)
+        if not opened_matches:
+            # Try to open the tab
+            tab_matches = self._tab_matcher.match(image, template_name="tongquan", threshold=0.75)
+            if tab_matches:
+                tab_btn = max(tab_matches, key=lambda m: m.confidence)
+                tx, ty = self._random_point_in_bbox(tab_btn.bbox)
+                logger.info(f"[Train] Opening Tong Quan tab at ({tx}, {ty}) conf={tab_btn.confidence:.2f}")
+                self.state_machine.pc_input.tap(tx, ty)
+                time.sleep(random.uniform(1.5, 2.5))
+                # Re-capture after opening
+                self.state_machine.pc_input.move_to_safe_zone()
+                image = self.state_machine.screen_capture.capture()
+                if image is None:
+                    return None
+            else:
+                logger.debug("[Train] tongquan icon not found")
+                return None
+
+        # Template match for 'Không hoạt động' text
+        text_matches = self._tab_matcher.match(image, template_name="khong_hoat_dong_text", threshold=0.70)
+        if text_matches:
+            best = max(text_matches, key=lambda m: m.confidence)
+            logger.info(f"[Train] Detected 'khong_hoat_dong_text' at {best.bbox} conf={best.confidence:.2f}")
+            return best.bbox
+
+        logger.debug("[Train] khong_hoat_dong_text not found")
+        return None
+
     def can_execute(self) -> bool:
         if self.state_machine is None or self.state_machine.screen_capture is None:
             return False
@@ -126,7 +167,7 @@ class TrainTroopsAction(BaseAction):
             time.sleep(random.uniform(1.0, 2.0))
             return False
 
-        # Check completed
+        # Check completed troops first (always collect before training)
         for completed_name in self.COMPLETED_ICONS:
             completed_matches = self._matcher.match(image, template_name=completed_name, threshold=0.75)
             if completed_matches:
@@ -134,14 +175,11 @@ class TrainTroopsAction(BaseAction):
                 logger.info(f"[Train] {completed_name} FOUND at {best.center} conf={best.confidence:.2f}")
                 return True
 
-        # Check train_available
-        matches = self._matcher.match(image, template_name="train_available", threshold=0.70)
-        if matches:
-            best = max(matches, key=lambda m: m.confidence)
-            logger.info(f"[Train] train_available FOUND at {best.center} conf={best.confidence:.2f}")
+        # Check Tong Quan tab for idle buildings
+        if self._open_tongquan_and_get_idle_bbox(image) is not None:
             return True
 
-        logger.debug("[Train] can_execute: nothing found")
+        logger.info("[Train] can_execute: nothing found")
         return False
 
     def execute(self) -> bool:
@@ -171,11 +209,25 @@ class TrainTroopsAction(BaseAction):
             self.state_machine.pc_input.move_to_safe_zone()
             image = self.state_machine.screen_capture.capture()
         elif city_state == "unknown":
-            logger.warning("[Train] Unknown city/world state — pressing ESC to dismiss popup")
-            self.state_machine.pc_input.key_back()
-            time.sleep(random.uniform(1.0, 2.0))
-            self.on_failure("Could not determine city/world state")
-            return False
+            logger.warning("[Train] Unknown city/world state — retrying in 1s")
+            time.sleep(1.0)
+            self.state_machine.pc_input.move_to_safe_zone()
+            image = self.state_machine.screen_capture.capture()
+            if image is not None:
+                city_state = self._detect_city_state(image)
+            if city_state == "unknown":
+                logger.warning("[Train] Still unknown — pressing ESC to dismiss popup")
+                self.state_machine.pc_input.key_back()
+                time.sleep(random.uniform(1.0, 2.0))
+                self.on_failure("Could not determine city/world state")
+                return False
+            elif city_state == "in_world":
+                logger.info("[Train] In world map after retry — entering city")
+                if not self._ensure_in_city(image):
+                    self.on_failure("Could not enter city view")
+                    return False
+                self.state_machine.pc_input.move_to_safe_zone()
+                image = self.state_machine.screen_capture.capture()
         if image is None:
             self.on_failure("Screenshot failed after city transition")
             return False
@@ -191,26 +243,21 @@ class TrainTroopsAction(BaseAction):
                 time.sleep(random.uniform(1.0, 3.0))
                 return True
 
-        # 2. Find and tap train_available icon
-        avail_matches = self._matcher.match(image, template_name="train_available", threshold=0.70)
-        if not avail_matches:
-            logger.info("[Train] train_available not found in execute")
+        # 2. Verify idle buildings via Tong Quan tab and click directly on the text
+        idle_bbox = self._open_tongquan_and_get_idle_bbox(image)
+        if idle_bbox is None:
+            logger.info("[Train] No idle buildings confirmed in Tong Quan")
             return False
-        avail_btn = max(avail_matches, key=lambda m: m.confidence)
-        bx1, by1, bx2, by2 = avail_btn.bbox
+
+        # Click on the 'Không hoạt động' text to jump to the building
+        bx1, by1, bx2, by2 = idle_bbox
         cx = (bx1 + bx2) // 2
         cy = (by1 + by2) // 2
-        # Offset left & down to click on the building instead of the floating Z icon
-        offset_x = random.randint(30, 80)
-        offset_y = random.randint(20, 50)
-        img_h, img_w = image.shape[:2]
-        ax = max(0, cx - offset_x)
-        ay = min(img_h - 1, cy + offset_y)
-        logger.info(f"[Train] Step 2/3: Tapping building near train_available at ({ax}, {ay}) (offset -{offset_x}, +{offset_y})")
-        self.state_machine.pc_input.tap(ax, ay)
-        time.sleep(random.uniform(1.0, 3.0))
+        logger.info(f"[Train] Step 2/3: Tapping 'Không hoạt động' at ({cx}, {cy})")
+        self.state_machine.pc_input.tap(cx, cy)
+        time.sleep(random.uniform(2.0, 3.0))  # wait for game to pan to building and open popup
 
-        # 3. In popup, find one of the 4 troop type icons
+        # 4. In popup, find one of the 4 troop type icons
         self.state_machine.pc_input.move_to_safe_zone()
         popup_image = self.state_machine.screen_capture.capture()
         if popup_image is None:
@@ -242,7 +289,7 @@ class TrainTroopsAction(BaseAction):
         self.state_machine.pc_input.tap(tx, ty)
         time.sleep(random.uniform(1.0, 3.0))
 
-        # 4. Find and tap train_confirm
+        # 5. Find and tap train_confirm
         self.state_machine.pc_input.move_to_safe_zone()
         confirm_image = self.state_machine.screen_capture.capture()
         if confirm_image is None:
@@ -267,5 +314,3 @@ class TrainTroopsAction(BaseAction):
             self.state_machine.pc_input.tap(clx, cly)
             time.sleep(random.uniform(1.0, 3.0))
         return False
-
-

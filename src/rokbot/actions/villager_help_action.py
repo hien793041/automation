@@ -1,11 +1,10 @@
-"""Alliance help action using template matching."""
+"""Villager help action for accidentally clicked villagers."""
 
 import random
 import time
 from pathlib import Path
 from typing import TYPE_CHECKING, Optional, Tuple
 
-import numpy as np
 from loguru import logger
 
 from rokbot.actions.base_action import BaseAction
@@ -16,11 +15,12 @@ if TYPE_CHECKING:
     from rokbot.core.state_machine import StateMachine
 
 
-class AllianceHelpAction(BaseAction):
-    """Action to tap alliance help button when available."""
+class VillagerHelpAction(BaseAction):
+    """Tap a villager and confirm to help them."""
 
     TEMPLATES_DIR = Path("data/templates")
-    HELP_TEMPLATE = "help_btn"
+    VILLAGER_TEMPLATE = "dan_lang"
+    CONFIRM_TEMPLATE = "confirm_dan_lang"
 
     def __init__(self, config: BotConfig, state_machine: Optional["StateMachine"] = None):
         super().__init__(config, state_machine)
@@ -44,13 +44,13 @@ class AllianceHelpAction(BaseAction):
         if image is None:
             return False
 
-        matches = self._matcher.match(image, template_name=self.HELP_TEMPLATE, threshold=0.75)
+        matches = self._matcher.match(image, template_name=self.VILLAGER_TEMPLATE, threshold=0.75)
         if matches:
             best = max(matches, key=lambda m: m.confidence)
-            logger.info(f"[Help] {self.HELP_TEMPLATE} FOUND at {best.center} conf={best.confidence:.2f}")
+            logger.info(f"[Villager] {self.VILLAGER_TEMPLATE} FOUND at {best.center} conf={best.confidence:.2f}")
             return True
 
-        logger.debug("[Help] help_btn not found")
+        logger.debug("[Villager] dan_lang not found")
         return False
 
     def execute(self) -> bool:
@@ -70,14 +70,38 @@ class AllianceHelpAction(BaseAction):
             self.on_failure("Screenshot failed")
             return False
 
-        matches = self._matcher.match(image, template_name=self.HELP_TEMPLATE, threshold=0.75)
-        if not matches:
-            logger.info("[Help] help_btn disappeared")
+        villager_matches = self._matcher.match(image, template_name=self.VILLAGER_TEMPLATE, threshold=0.75)
+        if not villager_matches:
+            logger.info("[Villager] dan_lang disappeared")
             return False
 
-        btn = max(matches, key=lambda m: m.confidence)
-        hx, hy = self._random_point_in_bbox(btn.bbox)
-        logger.info(f"[Help] Tapping help_btn at ({hx}, {hy})")
-        self.state_machine.pc_input.tap(hx, hy)
+        villager = max(villager_matches, key=lambda m: m.confidence)
+        bx1, by1, bx2, by2 = villager.bbox
+        cx = (bx1 + bx2) // 2
+        cy = (by1 + by2) // 2
+
+        # Tap below the villager icon ~100px to select the help option
+        offset_y = random.randint(90, 110)
+        img_h = image.shape[0]
+        tap_y = min(img_h - 1, cy + offset_y)
+        logger.info(f"[Villager] Step 1/2: Tapping below villager at ({cx}, {tap_y}) (offset +{offset_y})")
+        self.state_machine.pc_input.tap(cx, tap_y)
         time.sleep(random.uniform(1.0, 3.0))
-        return True
+
+        # Confirm the action
+        self.state_machine.pc_input.move_to_safe_zone()
+        confirm_image = self.state_machine.screen_capture.capture()
+        if confirm_image is None:
+            return False
+
+        confirm_matches = self._matcher.match(confirm_image, template_name=self.CONFIRM_TEMPLATE, threshold=0.75)
+        if confirm_matches:
+            confirm_btn = max(confirm_matches, key=lambda m: m.confidence)
+            cfx, cfy = self._random_point_in_bbox(confirm_btn.bbox)
+            logger.info(f"[Villager] Step 2/2: Tapping confirm at ({cfx}, {cfy})")
+            self.state_machine.pc_input.tap(cfx, cfy)
+            time.sleep(random.uniform(1.0, 3.0))
+            return True
+
+        logger.info("[Villager] confirm_dan_lang not found")
+        return False

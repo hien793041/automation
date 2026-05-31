@@ -182,11 +182,25 @@ class ScoutAction(BaseAction):
             self.state_machine.pc_input.move_to_safe_zone()
             image = self.state_machine.screen_capture.capture()
         elif city_state == "unknown":
-            logger.warning("[Scout] Unknown city/world state — pressing ESC to dismiss popup")
-            self.state_machine.pc_input.key_back()
-            time.sleep(random.uniform(1.0, 2.0))
-            self.on_failure("Could not determine city/world state")
-            return False
+            logger.warning("[Scout] Unknown city/world state — retrying in 1s")
+            time.sleep(1.0)
+            self.state_machine.pc_input.move_to_safe_zone()
+            image = self.state_machine.screen_capture.capture()
+            if image is not None:
+                city_state = self._detect_city_state(image)
+            if city_state == "unknown":
+                logger.warning("[Scout] Still unknown — pressing ESC to dismiss popup")
+                self.state_machine.pc_input.key_back()
+                time.sleep(random.uniform(1.0, 2.0))
+                self.on_failure("Could not determine city/world state")
+                return False
+            elif city_state == "in_world":
+                logger.debug("On world map after retry — entering city first")
+                if not self._ensure_in_city(image):
+                    self.on_failure("Could not enter city view")
+                    return False
+                self.state_machine.pc_input.move_to_safe_zone()
+                image = self.state_machine.screen_capture.capture()
         if image is None:
             self.on_failure("Screenshot failed after city transition")
             return False
@@ -215,14 +229,15 @@ class ScoutAction(BaseAction):
         self.state_machine.pc_input.tap(building_x, building_y)
 
         # 3. Wait for the scout menu/popup to open
-        time.sleep(random.uniform(1.0, 3.0))
+        time.sleep(random.uniform(0.8, 1.0))
 
         # 4. Tap buttons in the popup sequentially, re-capturing after each tap
         #    because later buttons only appear after earlier ones are pressed.
         # Sequence: scout_button -> scout_send (x2) -> scout_confirm
         popup_sequence = ["scout_button", "scout_send", "scout_send", "scout_confirm"]
+        scout_send_count = 0
         for idx, tpl in enumerate(popup_sequence, start=2):
-            time.sleep(random.uniform(1.0, 3.0))  # wait for UI to settle before finding button
+            time.sleep(random.uniform(0.3, 0.8))  # quick wait before finding button
             self.state_machine.pc_input.move_to_safe_zone()
             popup_image = self.state_machine.screen_capture.capture()
             if popup_image is None:
@@ -233,7 +248,16 @@ class ScoutAction(BaseAction):
                 bx, by = self._random_point_in_bbox(btn.bbox)
                 logger.info(f"[Scout] Step {idx}/5: Tapping '{tpl}' at ({bx}, {by})")
                 self.state_machine.pc_input.tap(bx, by)
-                time.sleep(random.uniform(1.0, 3.0))  # wait for popup UI to fully transition
+
+                # Long delay only for the 2nd scout_send (needs ~1.5s for UI to transition)
+                if tpl == "scout_send":
+                    scout_send_count += 1
+                    if scout_send_count == 1:
+                        time.sleep(random.uniform(1.8, 2.0))
+                    else:
+                        time.sleep(random.uniform(0.3, 0.8))
+                else:
+                    time.sleep(random.uniform(0.3, 0.8))
             else:
                 # Button not found — try to close popup and restart flow
                 close_matches = self._matcher.match(popup_image, template_name="close_popup")
@@ -242,7 +266,7 @@ class ScoutAction(BaseAction):
                     cx, cy = self._random_point_in_bbox(close_btn.bbox)
                     logger.info(f"[Scout] Button '{tpl}' not found — closing popup at ({cx}, {cy})")
                     self.state_machine.pc_input.tap(cx, cy)
-                    time.sleep(random.uniform(1.0, 3.0))
+                    time.sleep(random.uniform(0.5, 1.0))
                 return False
 
         # Ensure we end up in city view after scouting (UI may switch to world map)

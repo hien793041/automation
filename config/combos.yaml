@@ -1,0 +1,16 @@
+# User-defined combos — add your own here.
+# Each combo is a list of action names executed in order.
+# Available actions: gather, alliance_help, barbarian_attack, scout, train_troops,
+#                    villager_help, reconnect
+
+combos:
+  my_combo:
+    - villager_help
+    - scout
+    - alliance_help
+    - train_troops
+  my_combo2:
+    - scout
+    - alliance_help
+    # - train_troops
+    - barbarian_attack

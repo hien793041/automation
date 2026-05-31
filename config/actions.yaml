@@ -17,10 +17,11 @@ actions:
     enabled: false
     priority: 4
     timeout_seconds: 15.0
-  combo_scout_train:
+
+  villager_help:
     enabled: true
-    priority: 3
-    timeout_seconds: 30.0
+    priority: 2
+    timeout_seconds: 15.0
   reconnect:
     enabled: false
     priority: 0
