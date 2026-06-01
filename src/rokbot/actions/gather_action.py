@@ -23,7 +23,8 @@ class GatherAction(BaseAction):
     SHARED_TEMPLATES_DIR = Path("data/templates")
 
     CITY_ICON_ROI_RATIO: Tuple[float, float, float, float] = (0.75, 0.75, 1.0, 1.0)
-    RESOURCE_ICONS = ["corn_icon", "wood_icon"]
+    # RESOURCE_ICONS = ["corn_icon", "wood_icon"]
+    RESOURCE_ICONS = ["wood_icon"]
 
     def __init__(self, config: BotConfig, state_machine: Optional["StateMachine"] = None):
         super().__init__(config, state_machine)
