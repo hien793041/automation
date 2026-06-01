@@ -150,7 +150,7 @@ class DynamicComboAction(BaseAction):
         # City/world transition helpers based on action type
         world_actions = {"barbarian_attack"}
         city_actions = {"scout", "train_troops", "alliance_help", "combo_scout_train"}
-        no_map_check_actions = {"villager_help"}
+        no_map_check_actions = {"villager_help", "alliance_help", "barbarian_attack"}
 
         if action_name in city_actions or action_name in world_actions:
             self.state_machine.pc_input.move_to_safe_zone()

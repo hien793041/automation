@@ -23,8 +23,12 @@ class GatherAction(BaseAction):
     SHARED_TEMPLATES_DIR = Path("data/templates")
 
     CITY_ICON_ROI_RATIO: Tuple[float, float, float, float] = (0.75, 0.75, 1.0, 1.0)
-    # RESOURCE_ICONS = ["corn_icon", "wood_icon"]
-    RESOURCE_ICONS = ["wood_icon"]
+    RESOURCE_ICONS = ["corn_icon", "wood_icon", "stone_icon", "gold_icon"]
+    # RESOURCE_ICONS = ["corn_icon", "stone_icon"]
+
+    # Stop gathering when this many troops are already active
+    MAX_ACTIVE_TROOPS = 3
+    TROOP_STATUS_TEMPLATES = ["gathering", "backing", "moving", "building"]
 
     def __init__(self, config: BotConfig, state_machine: Optional["StateMachine"] = None):
         super().__init__(config, state_machine)
@@ -36,6 +40,21 @@ class GatherAction(BaseAction):
             templates_dir=self.SHARED_TEMPLATES_DIR,
             threshold=0.80,
         )
+
+    def _count_active_troops(self, image: np.ndarray) -> int:
+        """Count gathering/backing/moving troop icons on the world map."""
+        total = 0
+        for tpl_name in self.TROOP_STATUS_TEMPLATES:
+            matches = self._matcher.match(
+                image, template_name=tpl_name, threshold=0.75, max_matches=10
+            )
+            count = len(matches)
+            if count:
+                logger.debug(f"[Gather] Found {count} '{tpl_name}' icon(s)")
+                total += count
+        if total:
+            logger.info(f"[Gather] Active troop count = {total}")
+        return total
 
     def _random_point_in_bbox(self, bbox: Tuple[int, int, int, int]) -> Tuple[int, int]:
         x1, y1, x2, y2 = bbox
@@ -99,11 +118,10 @@ class GatherAction(BaseAction):
         if image is None:
             return False
 
-        # 1. Check troop_on_world FIRST (regardless of city/world state)
-        troop_matches = self._matcher.match(image, template_name="troop_on_world", threshold=0.75)
-        if troop_matches:
-            best = max(troop_matches, key=lambda m: m.confidence)
-            logger.info(f"[Gather] troop_on_world FOUND at {best.center} conf={best.confidence:.2f} — stopping")
+        # Count active troop icons (gathering/backing/moving/building)
+        active_count = self._count_active_troops(image)
+        if active_count >= self.MAX_ACTIVE_TROOPS:
+            logger.info(f"[Gather] Active troops ({active_count}) >= max ({self.MAX_ACTIVE_TROOPS}) — stopping")
             return False
 
         city_state = self._detect_city_state(image)
@@ -135,17 +153,11 @@ class GatherAction(BaseAction):
             self.on_failure("PCInput not available")
             return False
 
-        # 0. Check troops on world FIRST before switching map
+        # Capture initial screen
         self.state_machine.pc_input.move_to_safe_zone()
         image = self.state_machine.screen_capture.capture()
         if image is None:
             self.on_failure("Screenshot failed")
-            return False
-
-        troop_matches = self._matcher.match(image, template_name="troop_on_world", threshold=0.75)
-        if troop_matches:
-            best = max(troop_matches, key=lambda m: m.confidence)
-            logger.info(f"[Gather] troop_on_world FOUND at {best.center} conf={best.confidence:.2f} — stopping")
             return False
 
         # Ensure we are in world view
@@ -180,6 +192,12 @@ class GatherAction(BaseAction):
             self.on_failure("Screenshot failed after world transition")
             return False
 
+        # Re-check active troop count after ensuring world view
+        active_count = self._count_active_troops(image)
+        if active_count >= self.MAX_ACTIVE_TROOPS:
+            logger.info(f"[Gather] Active troops ({active_count}) >= max ({self.MAX_ACTIVE_TROOPS}) — stopping")
+            return False
+
         # 1. Tap "Find" button on world map
         find_matches = self._matcher.match(image, template_name="world_find_btn", threshold=0.75)
         if not find_matches:
@@ -197,15 +215,23 @@ class GatherAction(BaseAction):
         if resource_image is None:
             return False
 
+        # Pick resource randomly (corn or stone)
         resource_match = None
-        resource_name = None
-        for res_name in self.RESOURCE_ICONS:
-            res_matches = self._matcher.match(resource_image, template_name=res_name, threshold=0.75)
+        primary_name = random.choice(self.RESOURCE_ICONS)
+
+        res_matches = self._matcher.match(resource_image, template_name=primary_name, threshold=0.75)
+        if res_matches:
+            resource_match = max(res_matches, key=lambda m: m.confidence)
+            resource_name = primary_name
+            logger.info(f"[Gather] Step 2/6: Found '{primary_name}' conf={resource_match.confidence:.2f}")
+        else:
+            # Fallback to the other resource type
+            fallback_name = next(r for r in self.RESOURCE_ICONS if r != primary_name)
+            res_matches = self._matcher.match(resource_image, template_name=fallback_name, threshold=0.75)
             if res_matches:
                 resource_match = max(res_matches, key=lambda m: m.confidence)
-                resource_name = res_name
-                logger.info(f"[Gather] Step 2/6: Found '{res_name}' conf={resource_match.confidence:.2f}")
-                break
+                resource_name = fallback_name
+                logger.info(f"[Gather] Step 2/6: Found fallback '{fallback_name}' conf={resource_match.confidence:.2f}")
 
         if resource_match is None:
             logger.info("[Gather] No resource icon found")

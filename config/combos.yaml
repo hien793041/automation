@@ -16,5 +16,10 @@ combos:
     - alliance_help
     # - train_troops
     - barbarian_attack
+    - train_troops
   my_combo3:
-    - gather
+    - reconnect
+    - villager_help
+    - scout
+    - alliance_help
+    - barbarian_attack

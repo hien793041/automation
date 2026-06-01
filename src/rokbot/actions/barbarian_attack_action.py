@@ -25,6 +25,7 @@ class BarbarianAttackAction(BaseAction):
 
     # Bottom-right corner ROI where city/map toggle icon lives
     CITY_ICON_ROI_RATIO: Tuple[float, float, float, float] = (0.75, 0.75, 1.0, 1.0)
+    TROOP_AVAIL_TEMPLATES = ["troops_available", "troops_available1"]
 
     def __init__(self, config: BotConfig, state_machine: Optional["StateMachine"] = None):
         super().__init__(config, state_machine)
@@ -156,13 +157,28 @@ class BarbarianAttackAction(BaseAction):
                 logger.debug(f"Barbarian attack cooldown: {self._cooldown_seconds - elapsed:.0f}s remaining")
                 return False
 
-        # 0. Ensure we are in world view
+        # 0. Verify troops are available FIRST (works in both city and world)
         self.state_machine.pc_input.move_to_safe_zone()
         image = self.state_machine.screen_capture.capture()
         if image is None:
             self.on_failure("Screenshot failed")
             return False
 
+        avail_found = False
+        avail_name = None
+        for tpl in self.TROOP_AVAIL_TEMPLATES:
+            avail_matches = self._matcher.match(image, template_name=tpl, threshold=0.80)
+            if avail_matches:
+                avail_btn = max(avail_matches, key=lambda m: m.confidence)
+                avail_found = True
+                avail_name = tpl
+                logger.info(f"[Barbarian] Step 0/7: {tpl} confirmed conf={avail_btn.confidence:.2f}")
+                break
+        if not avail_found:
+            logger.info("[Barbarian] Step 0/7: no troops available — passing")
+            return False
+
+        # Ensure we are in world view
         city_state = self._detect_city_state(image)
         if city_state == "in_city":
             logger.info("[Barbarian] In city — switching to world map")
@@ -178,18 +194,6 @@ class BarbarianAttackAction(BaseAction):
             self.on_failure("Screenshot failed after world transition")
             return False
 
-        # 0. Verify troops are available before attacking
-        self.state_machine.pc_input.move_to_safe_zone()
-        verify_image = self.state_machine.screen_capture.capture()
-        if verify_image is None:
-            return False
-        avail_matches = self._matcher.match(verify_image, template_name="troops_available", threshold=0.80)
-        if not avail_matches:
-            logger.info("[Barbarian] Step 0/7: troops_available not found — passing")
-            return False
-        avail_btn = max(avail_matches, key=lambda m: m.confidence)
-        logger.info(f"[Barbarian] Step 0/7: troops_available confirmed conf={avail_btn.confidence:.2f}")
-
         # 1. Tap "Find" button on world map
         find_matches = self._matcher.match(image, template_name="world_find_btn", threshold=0.80)
         if not find_matches:
@@ -202,19 +206,19 @@ class BarbarianAttackAction(BaseAction):
         time.sleep(random.uniform(1.0, 3.0))
 
         # 2. Select barbarian from the menu
-        self.state_machine.pc_input.move_to_safe_zone()
-        menu_image = self.state_machine.screen_capture.capture()
-        if menu_image is None:
-            return False
-        select_matches = self._matcher.match(menu_image, template_name="select_barbarian", threshold=0.80)
-        if not select_matches:
-            logger.debug("Barbarian select option not found")
-            return False
-        select_btn = max(select_matches, key=lambda m: m.confidence)
-        sx, sy = self._random_point_in_bbox(select_btn.bbox)
-        logger.info(f"[Barbarian] Step 2/7: Tapping 'Select Barbarian' at ({sx}, {sy})")
-        self.state_machine.pc_input.tap(sx, sy)
-        time.sleep(random.uniform(1.0, 3.0))
+        # self.state_machine.pc_input.move_to_safe_zone()
+        # menu_image = self.state_machine.screen_capture.capture()
+        # if menu_image is None:
+        #     return False
+        # select_matches = self._matcher.match(menu_image, template_name="select_barbarian", threshold=0.80)
+        # if not select_matches:
+        #     logger.debug("Barbarian select option not found")
+        #     return False
+        # select_btn = max(select_matches, key=lambda m: m.confidence)
+        # sx, sy = self._random_point_in_bbox(select_btn.bbox)
+        # logger.info(f"[Barbarian] Step 2/7: Tapping 'Select Barbarian' at ({sx}, {sy})")
+        # self.state_machine.pc_input.tap(sx, sy)
+        # time.sleep(random.uniform(1.0, 3.0))
 
         # 3. Tap "Find" button inside the menu to search nearby barbarians
         self.state_machine.pc_input.move_to_safe_zone()
@@ -261,22 +265,29 @@ class BarbarianAttackAction(BaseAction):
         self.state_machine.pc_input.tap(chx, chy)
         time.sleep(random.uniform(1.0, 3.0))
 
-        # 6. Use existing troops (pre-configured)
+        # 6. Use existing troops (pre-configured) — check both templates
         self.state_machine.pc_input.move_to_safe_zone()
         troop_image = self.state_machine.screen_capture.capture()
         if troop_image is None:
             return False
 
-        existing_matches = self._matcher.match(troop_image, template_name="existing_troops", threshold=0.80)
-        if existing_matches:
-            existing_btn = max(existing_matches, key=lambda m: m.confidence)
+        existing_btn = None
+        existing_name = None
+        for tpl in ["existing_troops", "existing_troops1"]:
+            matches = self._matcher.match(troop_image, template_name=tpl, threshold=0.80)
+            if matches:
+                existing_btn = max(matches, key=lambda m: m.confidence)
+                existing_name = tpl
+                break
+
+        if existing_btn is not None:
             ex, ey = self._random_point_in_bbox(existing_btn.bbox)
-            logger.info(f"[Barbarian] Step 6/7: Tapping 'Existing Troops' at ({ex}, {ey})")
+            logger.info(f"[Barbarian] Step 6/7: Tapping '{existing_name}' at ({ex}, {ey})")
             self.state_machine.pc_input.tap(ex, ey)
             time.sleep(random.uniform(1.0, 3.0))
             return True
 
-        logger.debug("existing_troops not found")
+        logger.info("[Barbarian] existing_troops / existing_troops1 not found")
         return False
 
     def on_success(self) -> None:

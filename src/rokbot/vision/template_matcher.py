@@ -59,8 +59,14 @@ class TemplateMatcher:
         template_name: Optional[str] = None,
         roi: Optional[Tuple[int, int, int, int]] = None,
         threshold: Optional[float] = None,
+        max_matches: int = 1,
     ) -> List[TemplateMatch]:
-        """Match templates against an image."""
+        """Match templates against an image.
+
+        Args:
+            max_matches: Maximum occurrences to return per template.
+                         1 means best match only (backward compatible).
+        """
         if not self._templates:
             return []
 
@@ -92,15 +98,43 @@ class TemplateMatcher:
             if template is None:
                 continue
             result = cv2.matchTemplate(search_gray, template, cv2.TM_CCOEFF_NORMED)
-            min_val, max_val, min_loc, max_loc = cv2.minMaxLoc(result)
+            h, w = template.shape[:2]
 
-            logger.debug(f"Template '{name}' best confidence = {max_val:.3f} (threshold={thr})")
+            if max_matches == 1:
+                # Fast path: single best match (original behaviour)
+                min_val, max_val, min_loc, max_loc = cv2.minMaxLoc(result)
+                logger.debug(f"Template '{name}' best confidence = {max_val:.3f} (threshold={thr})")
+                if max_val >= thr:
+                    top_left = (max_loc[0] + offset_x, max_loc[1] + offset_y)
+                    bbox = (top_left[0], top_left[1], top_left[0] + w, top_left[1] + h)
+                    matches.append(TemplateMatch(template_name=name, confidence=max_val, bbox=bbox))
+            else:
+                # Multi-match path
+                loc = np.where(result >= thr)
+                candidates = []
+                for pt in zip(*loc[::-1]):
+                    conf = result[pt[1], pt[0]]
+                    candidates.append((conf, pt))
+                # Sort by confidence descending
+                candidates.sort(key=lambda x: x[0], reverse=True)
+                kept = []
+                min_dist = max(w, h) * 0.5
+                for conf, pt in candidates:
+                    cx = pt[0] + w // 2
+                    cy = pt[1] + h // 2
+                    too_close = False
+                    for (kx, ky) in kept:
+                        if ((cx - kx) ** 2 + (cy - ky) ** 2) < min_dist ** 2:
+                            too_close = True
+                            break
+                    if not too_close:
+                        kept.append((cx, cy))
+                        top_left = (pt[0] + offset_x, pt[1] + offset_y)
+                        bbox = (top_left[0], top_left[1], top_left[0] + w, top_left[1] + h)
+                        matches.append(TemplateMatch(template_name=name, confidence=conf, bbox=bbox))
+                        if len(kept) >= max_matches:
+                            break
+                logger.debug(f"Template '{name}' multi-match: found {len(kept)} occurrence(s) (max={max_matches})")
 
-            if max_val >= thr:
-                h, w = template.shape[:2]
-                top_left = (max_loc[0] + offset_x, max_loc[1] + offset_y)
-                bbox = (top_left[0], top_left[1], top_left[0] + w, top_left[1] + h)
-                matches.append(TemplateMatch(template_name=name, confidence=max_val, bbox=bbox))
-
-        logger.debug(f"Template matched {len(matches)} templates")
+        logger.debug(f"Template matched {len(matches)} template(s)")
         return matches
