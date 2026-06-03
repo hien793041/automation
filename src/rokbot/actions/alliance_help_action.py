@@ -28,6 +28,7 @@ class AllianceHelpAction(BaseAction):
             templates_dir=self.TEMPLATES_DIR,
             threshold=0.75,
         )
+        self._pending_bbox: Optional[Tuple[int, int, int, int]] = None
 
     def _random_point_in_bbox(self, bbox: Tuple[int, int, int, int]) -> Tuple[int, int]:
         x1, y1, x2, y2 = bbox
@@ -47,9 +48,11 @@ class AllianceHelpAction(BaseAction):
         matches = self._matcher.match(image, template_name=self.HELP_TEMPLATE, threshold=0.75)
         if matches:
             best = max(matches, key=lambda m: m.confidence)
+            self._pending_bbox = best.bbox
             logger.info(f"[Help] {self.HELP_TEMPLATE} FOUND at {best.center} conf={best.confidence:.2f}")
             return True
 
+        self._pending_bbox = None
         logger.debug("[Help] help_btn not found")
         return False
 
@@ -64,6 +67,15 @@ class AllianceHelpAction(BaseAction):
             self.on_failure("PCInput not available")
             return False
 
+        if self._pending_bbox is not None:
+            hx, hy = self._random_point_in_bbox(self._pending_bbox)
+            logger.info(f"[Help] Tapping help_btn at ({hx}, {hy})")
+            self.state_machine.pc_input.tap(hx, hy)
+            self._pending_bbox = None
+            time.sleep(random.uniform(1.0, 3.0))
+            return True
+
+        # Fallback: re-find if pending was lost
         self.state_machine.pc_input.move_to_safe_zone()
         image = self.state_machine.screen_capture.capture()
         if image is None:

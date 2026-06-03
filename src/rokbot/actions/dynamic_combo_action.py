@@ -148,8 +148,8 @@ class DynamicComboAction(BaseAction):
             return False
 
         # City/world transition helpers based on action type
-        world_actions = {"barbarian_attack"}
-        city_actions = {"scout", "train_troops", "alliance_help", "combo_scout_train"}
+        world_actions = {"barbarian_attack", "scout_cave_high"}
+        city_actions = {"scout", "train_troops", "scout_cave_low", "combo_scout_train"}
         no_map_check_actions = {"villager_help", "alliance_help", "barbarian_attack"}
 
         if action_name in city_actions or action_name in world_actions:

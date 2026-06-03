@@ -10,6 +10,8 @@ from rokbot.actions.base_action import BaseAction
 from rokbot.actions.gather_action import GatherAction
 from rokbot.actions.reconnect_action import ReconnectAction
 from rokbot.actions.scout_action import ScoutAction
+from rokbot.actions.scout_cave_high_action import ScoutCaveHighAction
+from rokbot.actions.scout_cave_low_action import ScoutCaveLowAction
 from rokbot.actions.train_troops_action import TrainTroopsAction
 from rokbot.actions.villager_help_action import VillagerHelpAction
 from rokbot.core.config import BotConfig
@@ -26,6 +28,8 @@ class ActionFactory:
         "alliance_help": AllianceHelpAction,
         "barbarian_attack": BarbarianAttackAction,
         "scout": ScoutAction,
+        "scout_cave_high": ScoutCaveHighAction,
+        "scout_cave_low": ScoutCaveLowAction,
         "train_troops": TrainTroopsAction,
 
         "villager_help": VillagerHelpAction,

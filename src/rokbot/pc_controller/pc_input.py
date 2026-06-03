@@ -69,6 +69,11 @@ class PCInput:
         pyautogui.scroll(amount, left + x, top + y)
         logger.debug(f"PC scroll {amount} at ({x}, {y})")
 
+    def type_text(self, text: str, interval: float = 0.01) -> None:
+        """Type text into the game window."""
+        pyautogui.typewrite(text, interval=interval)
+        logger.debug(f"Typed text: '{text}'")
+
     def move_to_safe_zone(self) -> None:
         """Move mouse to a safe corner to avoid covering UI elements during capture."""
         rect = self.window_manager.get_client_rect()

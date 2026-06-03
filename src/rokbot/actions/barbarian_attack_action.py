@@ -120,20 +120,25 @@ class BarbarianAttackAction(BaseAction):
             logger.debug("[Barbarian] can_execute: city state unknown")
             return False
 
-        if city_state == "in_city":
-            logger.info("[Barbarian] In city — will switch to world map in execute()")
-            return True
-
-        # In world — check troops_available first
-        avail_matches = self._matcher.match(image, template_name="troops_available", threshold=0.80)
-        if not avail_matches:
-            logger.debug("[Barbarian] can_execute: no troops available")
+        # Check troops_available first (works in both city and world)
+        avail_found = False
+        for tpl in self.TROOP_AVAIL_TEMPLATES:
+            avail_matches = self._matcher.match(image, template_name=tpl, threshold=0.80)
+            if avail_matches:
+                avail_found = True
+                break
+        if not avail_found:
+            logger.info("[Barbarian] can_execute: no troops available")
             return False
 
-        # Check Find button visible
+        if city_state == "in_city":
+            logger.info("[Barbarian] In city — troops available, will switch to world in execute()")
+            return True
+
+        # In world — check Find button visible
         find_matches = self._matcher.match(image, template_name="world_find_btn", threshold=0.80)
         if not find_matches:
-            logger.debug("[Barbarian] can_execute: world_find_btn not found")
+            logger.info("[Barbarian] can_execute: world_find_btn not found")
             return False
 
         logger.debug("[Barbarian] can_execute: ready")
