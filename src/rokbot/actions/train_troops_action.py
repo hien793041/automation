@@ -26,7 +26,7 @@ class TrainTroopsAction(BaseAction):
     # Bottom-right corner ROI where city/map toggle icon lives
     CITY_ICON_ROI_RATIO: Tuple[float, float, float, float] = (0.75, 0.75, 1.0, 1.0)
 
-    COMPLETED_ICONS = ["t1_bo_completed", "t1_cung_completed", "t1_da_completed", "t1_ngua_completed"]
+    COMPLETED_ICONS = ["t1_bo_completed", "t1_cung_completed", "t1_da_completed", "t1_ngua_completed", "t3_bo_completed"]
     TRAIN_ICONS = ["bo_train", "cung_train", "da_train", "ngua_train"]
     AVAIL_TEMPLATES = ["train_available", "train_available1", "train_available2"]
 
@@ -169,11 +169,17 @@ class TrainTroopsAction(BaseAction):
 
         # Check completed troops first (always collect before training)
         for completed_name in self.COMPLETED_ICONS:
-            completed_matches = self._matcher.match(image, template_name=completed_name, threshold=0.75)
+            completed_matches = self._matcher.match(image, template_name=completed_name, threshold=0.70)
             if completed_matches:
                 best = max(completed_matches, key=lambda m: m.confidence)
                 logger.info(f"[Train] {completed_name} FOUND at {best.center} conf={best.confidence:.2f}")
                 return True
+            else:
+                # Debug: show best confidence even if below threshold
+                debug_matches = self._matcher.match(image, template_name=completed_name, threshold=0.30)
+                if debug_matches:
+                    best = max(debug_matches, key=lambda m: m.confidence)
+                    logger.debug(f"[Train] {completed_name} best conf={best.confidence:.2f} (below 0.70)")
 
         # Check Tong Quan tab for idle buildings
         if self._open_tongquan_and_get_idle_bbox(image) is not None:
@@ -285,11 +291,28 @@ class TrainTroopsAction(BaseAction):
             return False
 
         tx, ty = self._random_point_in_bbox(train_match.bbox)
-        logger.info(f"[Train] Step 4/5: Tapping '{train_name}' at ({tx}, {ty})")
+        logger.info(f"[Train] Step 4/6: Tapping '{train_name}' at ({tx}, {ty})")
         self.state_machine.pc_input.tap(tx, ty)
         time.sleep(random.uniform(1.0, 3.0))
 
-        # 5. Find and tap train_confirm
+        # 5. Find and tap the corresponding *_selected.png
+        self.state_machine.pc_input.move_to_safe_zone()
+        selected_image = self.state_machine.screen_capture.capture()
+        if selected_image is None:
+            return False
+
+        selected_name = train_name.replace("_train", "_selected")
+        selected_matches = self._matcher.match(selected_image, template_name=selected_name, threshold=0.75)
+        if selected_matches:
+            selected_btn = max(selected_matches, key=lambda m: m.confidence)
+            sx, sy = self._random_point_in_bbox(selected_btn.bbox)
+            logger.info(f"[Train] Step 5/6: Tapping '{selected_name}' at ({sx}, {sy})")
+            self.state_machine.pc_input.tap(sx, sy)
+            time.sleep(random.uniform(1.0, 3.0))
+        else:
+            logger.info(f"[Train] '{selected_name}' not found — proceeding without selection")
+
+        # 6. Find and tap train_confirm
         self.state_machine.pc_input.move_to_safe_zone()
         confirm_image = self.state_machine.screen_capture.capture()
         if confirm_image is None:
@@ -299,7 +322,7 @@ class TrainTroopsAction(BaseAction):
         if confirm_matches:
             confirm_btn = max(confirm_matches, key=lambda m: m.confidence)
             cfx, cfy = self._random_point_in_bbox(confirm_btn.bbox)
-            logger.info(f"[Train] Step 5/5: Tapping train_confirm at ({cfx}, {cfy})")
+            logger.info(f"[Train] Step 6/6: Tapping train_confirm at ({cfx}, {cfy})")
             self.state_machine.pc_input.tap(cfx, cfy)
             time.sleep(random.uniform(1.0, 3.0))
             return True

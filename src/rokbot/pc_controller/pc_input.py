@@ -74,6 +74,13 @@ class PCInput:
         pyautogui.typewrite(text, interval=interval)
         logger.debug(f"Typed text: '{text}'")
 
+    def hold_key(self, key: str, duration: float) -> None:
+        """Hold a keyboard key for a given duration."""
+        pyautogui.keyDown(key)
+        time.sleep(duration)
+        pyautogui.keyUp(key)
+        logger.debug(f"Held key '{key}' for {duration:.2f}s")
+
     def move_to_safe_zone(self) -> None:
         """Move mouse to a safe corner to avoid covering UI elements during capture."""
         rect = self.window_manager.get_client_rect()

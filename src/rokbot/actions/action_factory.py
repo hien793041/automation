@@ -8,6 +8,7 @@ from rokbot.actions.alliance_help_action import AllianceHelpAction
 from rokbot.actions.barbarian_attack_action import BarbarianAttackAction
 from rokbot.actions.base_action import BaseAction
 from rokbot.actions.gather_action import GatherAction
+from rokbot.actions.gather_gem_action import GatherGemAction
 from rokbot.actions.reconnect_action import ReconnectAction
 from rokbot.actions.scout_action import ScoutAction
 from rokbot.actions.scout_cave_high_action import ScoutCaveHighAction
@@ -25,6 +26,7 @@ class ActionFactory:
 
     _registry: Dict[str, Type[BaseAction]] = {
         "gather": GatherAction,
+        "gather_gem": GatherGemAction,
         "alliance_help": AllianceHelpAction,
         "barbarian_attack": BarbarianAttackAction,
         "scout": ScoutAction,

@@ -203,6 +203,7 @@ class DynamicComboAction(BaseAction):
             else:
                 action.on_failure(f"{action_name} returned False in combo")
                 return False
+            raise
         except Exception as e:
             logger.exception(f"[{self.combo_name}] {action_name} failed: {e}")
             action.on_failure(str(e))

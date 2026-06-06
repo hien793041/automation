@@ -1,9 +1,19 @@
 """Find and track the ROK PC game window."""
 
+import ctypes
 from typing import Optional, Tuple
 
 import win32gui
 from loguru import logger
+
+# Make process DPI-aware so win32gui, ImageGrab and pyautogui agree on physical pixels
+try:
+    ctypes.windll.shcore.SetProcessDpiAwareness(2)  # PerMonitorV2
+except Exception:
+    try:
+        ctypes.windll.user32.SetProcessDPIAware()
+    except Exception:
+        pass
 
 
 class WindowManager:
