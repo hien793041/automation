@@ -26,7 +26,7 @@ class TrainTroopsAction(BaseAction):
     # Bottom-right corner ROI where city/map toggle icon lives
     CITY_ICON_ROI_RATIO: Tuple[float, float, float, float] = (0.75, 0.75, 1.0, 1.0)
 
-    COMPLETED_ICONS = ["t1_bo_completed", "t1_cung_completed", "t1_da_completed", "t1_ngua_completed", "t3_bo_completed"]
+    COMPLETED_ICONS = ["t2_bo_completed", "t2_cung_completed", "t1_da_completed", "t2_ngua_completed", "t3_bo_completed"]
     TRAIN_ICONS = ["bo_train", "cung_train", "da_train", "ngua_train"]
     AVAIL_TEMPLATES = ["train_available", "train_available1", "train_available2"]
 
