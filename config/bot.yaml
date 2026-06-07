@@ -41,6 +41,7 @@ emulator:
 actions:
   enabled_actions:
     - gather
+    - rally_fort
     - alliance_help
     - scout
     - train_troops

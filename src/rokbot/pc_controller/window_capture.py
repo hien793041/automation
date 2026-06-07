@@ -1,5 +1,6 @@
 """Screenshot capture for the ROK PC game window."""
 
+from ctypes import windll
 from typing import Optional
 
 import cv2
@@ -18,7 +19,11 @@ class WindowCapture:
         self.window_manager = window_manager
 
     def capture(self) -> Optional[np.ndarray]:
-        """Capture the game client area and return as BGR numpy array."""
+        """Capture the game client area and return as BGR numpy array.
+
+        Uses PrintWindow so the window contents are captured even when
+        overlapped by other applications.
+        """
         if not self.window_manager.is_window_valid():
             logger.error("Cannot capture: game window not found")
             return None
@@ -31,26 +36,49 @@ class WindowCapture:
         width = right - left
         height = bottom - top
 
-        # Bring window to foreground before capture to avoid overlapping windows
-        try:
-            hwnd = self.window_manager.hwnd
-            if not win32gui.IsWindowVisible(hwnd):
-                win32gui.ShowWindow(hwnd, 9)  # SW_RESTORE
-            win32gui.SetForegroundWindow(hwnd)
-        except Exception as e:
-            logger.debug(f"Could not bring window to foreground: {e}")
+        hwnd = self.window_manager.hwnd
+        hwndDC = None
+        mfcDC = None
+        saveDC = None
+        saveBitMap = None
 
-        # Capture via ImageGrab
         try:
-            from PIL import ImageGrab
-            screenshot = ImageGrab.grab(bbox=(left, top, right, bottom))
-            image = np.array(screenshot)
-            image = cv2.cvtColor(image, cv2.COLOR_RGB2BGR)
-            logger.debug(f"Window captured (ImageGrab fallback): {image.shape}")
+            hwndDC = win32gui.GetWindowDC(hwnd)
+            mfcDC = win32ui.CreateDCFromHandle(hwndDC)
+            saveDC = mfcDC.CreateCompatibleDC()
+            saveBitMap = win32ui.CreateBitmap()
+            saveBitMap.CreateCompatibleBitmap(mfcDC, width, height)
+            saveDC.SelectObject(saveBitMap)
+
+            # PrintWindow with PW_RENDERFULLCONTENT (3) captures even when occluded
+            result = windll.user32.PrintWindow(hwnd, saveDC.GetSafeHdc(), 3)
+            if result == 0:
+                # Fallback to BitBlt if PrintWindow fails
+                saveDC.BitBlt((0, 0), (width, height), mfcDC, (0, 0), 13369376)  # SRCCOPY
+
+            # Convert bitmap to numpy array
+            bmpinfo = saveBitMap.GetInfo()
+            bmpstr = saveBitMap.GetBitmapBits(True)
+            image = np.frombuffer(bmpstr, dtype=np.uint8)
+            image.shape = (height, width, 4)  # BGRA
+            image = cv2.cvtColor(image, cv2.COLOR_BGRA2BGR)
+            logger.debug(f"Window captured (PrintWindow): {image.shape}")
             return image
         except Exception as e:
             logger.error(f"Window capture failed: {e}")
             return None
+        finally:
+            try:
+                if saveBitMap is not None:
+                    win32gui.DeleteObject(saveBitMap.GetHandle())
+                if saveDC is not None:
+                    saveDC.DeleteDC()
+                if mfcDC is not None:
+                    mfcDC.DeleteDC()
+                if hwndDC is not None:
+                    win32gui.ReleaseDC(hwnd, hwndDC)
+            except Exception:
+                pass
 
     def save_screenshot(self, path: str) -> bool:
         """Capture and save to disk."""

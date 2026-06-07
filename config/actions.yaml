@@ -1,10 +1,10 @@
 # Action definitions and priorities
 actions:
   gather:
-    enabled: false
+    enabled: true
     priority: 1
     timeout_seconds: 30.0
-    max_troops: 5
+    max_troops: 3
   alliance_help:
     enabled: false
     priority: 2
@@ -22,6 +22,10 @@ actions:
     enabled: true
     priority: 2
     timeout_seconds: 15.0
+  rally_fort:
+    enabled: true
+    priority: 2
+    timeout_seconds: 60.0
   reconnect:
     enabled: false
     priority: 0
