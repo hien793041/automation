@@ -38,6 +38,9 @@ class RallyFortAction(BaseAction):
     MAX_ACTIVE_TROOPS = 4
     TROOP_STATUS_TEMPLATES = ["gathering", "backing", "moving", "building"]
 
+    # Cooldown after a failed rally search (no suitable fort found)
+    COOLDOWN_SECONDS = (20, 30)
+
     # Offset from fort_icon center to how_far text (left, up)
     # Calibrated from debug screenshot: fort_icon on right, km text on upper-left
     HOW_FAR_OFFSET: Tuple[int, int] = (-1060, -165)
@@ -47,6 +50,7 @@ class RallyFortAction(BaseAction):
 
     def __init__(self, config: BotConfig, state_machine: Optional["StateMachine"] = None):
         super().__init__(config, state_machine)
+        self._last_failed_at: Optional[float] = None
         self._matcher = TemplateMatcher(
             templates_dir=self.TEMPLATES_DIR,
             threshold=0.75,
@@ -56,7 +60,7 @@ class RallyFortAction(BaseAction):
             threshold=0.80,
         )
         self._troop_matcher = TemplateMatcher(
-            templates_dir=Path("data/templates/gather"),
+            templates_dir=Path("data/templates/shared/troops"),
             threshold=0.75,
         )
 
@@ -221,9 +225,19 @@ class RallyFortAction(BaseAction):
 
     def can_execute(self) -> bool:
         """Return True if we are either in the city or able to enter it,
-        and active troops are below the max limit."""
+        active troops are below the max limit, and cooldown has expired."""
         if self.state_machine is None or self.state_machine.screen_capture is None:
             return False
+
+        if self._last_failed_at is not None:
+            elapsed = time.time() - self._last_failed_at
+            cooldown = random.uniform(self.COOLDOWN_SECONDS[0], self.COOLDOWN_SECONDS[1])
+            if elapsed < cooldown:
+                logger.debug(
+                    f"[RallyFort] Cooldown active ({elapsed:.1f}s / {cooldown:.1f}s) — bypassing"
+                )
+                return False
+            self._last_failed_at = None
 
         image = self.state_machine.screen_capture.capture()
         if image is None:
@@ -260,56 +274,30 @@ class RallyFortAction(BaseAction):
             return False
 
         # Step 2 — click sequence inside the city
-        fort_building_templates = ["fort_building", "fort_building1"]
         max_retries = 5
 
         for attempt in range(1, max_retries + 1):
-            # --- find and click fort_building ---
+            # --- find and click fort_building1 ---
             image = self.state_machine.screen_capture.capture()
             if image is None:
-                logger.warning("[RallyFort] Screenshot failed during fort_building")
+                logger.warning("[RallyFort] Screenshot failed during fort_building1")
                 return False
 
-            all_matches = []
-            for tpl_name in fort_building_templates:
-                matches = self._matcher.match(image, template_name=tpl_name, threshold=0.75)
-                if matches:
-                    all_matches.extend(matches)
-                    logger.debug(f"[RallyFort] Found {len(matches)} match(es) for '{tpl_name}'")
-
-            if not all_matches:
-                logger.warning("[RallyFort] No fort_building template found — aborting")
+            matches = self._matcher.match(image, template_name="fort_building1", threshold=0.75)
+            if not matches:
+                logger.warning("[RallyFort] fort_building1 not found — aborting")
                 return False
 
-            best = max(all_matches, key=lambda m: m.confidence)
-            clicked_template = best.template_name
+            best = max(matches, key=lambda m: m.confidence)
             x, y = self._random_point_in_bbox(best.bbox)
-            logger.info(f"[RallyFort] Clicking {clicked_template} at ({x}, {y}) conf={best.confidence:.2f}")
+            logger.info(f"[RallyFort] Clicking fort_building1 at ({x}, {y}) conf={best.confidence:.2f}")
             self.state_machine.pc_input.tap(x, y)
             time.sleep(random.uniform(1.0, 2.0))
-
-            # --- click open_building_btn (skip if we clicked fort_building1) ---
-            if clicked_template != "fort_building1":
-                image = self.state_machine.screen_capture.capture()
-                if image is None:
-                    logger.warning("[RallyFort] Screenshot failed during open_building_btn")
-                    return False
-
-                matches = self._matcher.match(image, template_name="open_building_btn", threshold=0.75)
-                if not matches:
-                    logger.warning("[RallyFort] open_building_btn not found — aborting")
-                    return False
-
-                best = max(matches, key=lambda m: m.confidence)
-                x, y = self._random_point_in_bbox(best.bbox)
-                logger.info(f"[RallyFort] Clicking open_building_btn at ({x}, {y}) conf={best.confidence:.2f}")
-                self.state_machine.pc_input.tap(x, y)
-                time.sleep(random.uniform(3.0, 4.0))  # wait for rally board to fully load
 
             # --- check if fort_icon appears (correct building) ---
             image = self.state_machine.screen_capture.capture()
             if image is None:
-                logger.warning("[RallyFort] Screenshot failed after entering building")
+                logger.warning("[RallyFort] Screenshot failed after clicking fort_building1")
                 return False
 
             fort_icon_matches = self._matcher.match(image, template_name="fort_icon", threshold=0.75)
@@ -420,7 +408,8 @@ class RallyFortAction(BaseAction):
                 break
 
         if chosen_fort is None:
-            logger.warning(f"[RallyFort] No rally found under {self.MAX_KM} KM — closing board")
+            logger.warning(f"[RallyFort] No rally found under {self.MAX_KM} KM — closing board and starting cooldown")
+            self._last_failed_at = time.time()
             close_matches = self._matcher.match(image, template_name="close_building", threshold=0.75)
             if close_matches:
                 best_close = max(close_matches, key=lambda m: m.confidence)

@@ -42,7 +42,7 @@ class GatherGemAction(BaseAction):
             threshold=0.80,
         )
         self._troop_matcher = TemplateMatcher(
-            templates_dir=Path("data/templates/gather"),
+            templates_dir=Path("data/templates/shared/troops"),
             threshold=0.75,
         )
 

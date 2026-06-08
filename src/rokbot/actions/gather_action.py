@@ -21,6 +21,7 @@ class GatherAction(BaseAction):
 
     TEMPLATES_DIR = Path("data/templates/gather")
     SHARED_TEMPLATES_DIR = Path("data/templates")
+    TROOP_TEMPLATES_DIR = Path("data/templates/shared/troops")
 
     CITY_ICON_ROI_RATIO: Tuple[float, float, float, float] = (0.75, 0.75, 1.0, 1.0)
     RESOURCE_ICONS = ["corn_icon", "wood_icon", "stone_icon", "gold_icon"]
@@ -40,12 +41,16 @@ class GatherAction(BaseAction):
             templates_dir=self.SHARED_TEMPLATES_DIR,
             threshold=0.80,
         )
+        self._troop_matcher = TemplateMatcher(
+            templates_dir=self.TROOP_TEMPLATES_DIR,
+            threshold=0.75,
+        )
 
     def _count_active_troops(self, image: np.ndarray) -> int:
         """Count gathering/backing/moving troop icons on the world map."""
         total = 0
         for tpl_name in self.TROOP_STATUS_TEMPLATES:
-            matches = self._matcher.match(
+            matches = self._troop_matcher.match(
                 image, template_name=tpl_name, threshold=0.75, max_matches=10
             )
             count = len(matches)
