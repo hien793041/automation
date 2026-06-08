@@ -24,11 +24,11 @@ class GatherAction(BaseAction):
     TROOP_TEMPLATES_DIR = Path("data/templates/shared/troops")
 
     CITY_ICON_ROI_RATIO: Tuple[float, float, float, float] = (0.75, 0.75, 1.0, 1.0)
-    RESOURCE_ICONS = ["corn_icon", "wood_icon", "stone_icon", "gold_icon"]
-    # RESOURCE_ICONS = ["wood_icon", "stone_icon", "gold_icon"]
+    # RESOURCE_ICONS = ["corn_icon", "wood_icon", "stone_icon", "gold_icon"]
+    RESOURCE_ICONS = ["wood_icon", "stone_icon", "corn_icon"]
 
     # Stop gathering when this many troops are already active
-    MAX_ACTIVE_TROOPS = 3
+    MAX_ACTIVE_TROOPS = 4
     TROOP_STATUS_TEMPLATES = ["gathering", "backing", "moving", "building", "attacking", "attacking1"]
 
     def __init__(self, config: BotConfig, state_machine: Optional["StateMachine"] = None):

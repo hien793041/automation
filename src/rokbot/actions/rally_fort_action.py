@@ -112,13 +112,6 @@ class RallyFortAction(BaseAction):
             logger.debug(f"[RallyFort] Empty km crop {label}")
             return -1
 
-        # Save debug crop
-        debug_dir = Path("data/debug/rally_ocr")
-        debug_dir.mkdir(parents=True, exist_ok=True)
-        dbg_name = debug_dir / f"km_crop_{uuid.uuid4().hex[:6]}.png"
-        cv2.imwrite(str(dbg_name), crop)
-        logger.debug(f"[RallyFort] Saved km crop {label} to {dbg_name}")
-
         gray = cv2.cvtColor(crop, cv2.COLOR_BGR2GRAY)
 
         # Mask bright pixels (white text) → black text on white background
