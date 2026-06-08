@@ -139,13 +139,37 @@ class TrainTroopsAction(BaseAction):
                 return None
 
         # Template match for 'Không hoạt động' text
-        text_matches = self._tab_matcher.match(image, template_name="khong_hoat_dong_text", threshold=0.70)
-        if text_matches:
-            best = max(text_matches, key=lambda m: m.confidence)
-            logger.info(f"[Train] Detected 'khong_hoat_dong_text' at {best.bbox} conf={best.confidence:.2f}")
-            return best.bbox
+        text_matches = self._tab_matcher.match(
+            image, template_name="khong_hoat_dong_text", threshold=0.70, max_matches=10
+        )
+        if not text_matches:
+            logger.debug("[Train] khong_hoat_dong_text not found")
+            return None
 
-        logger.debug("[Train] khong_hoat_dong_text not found")
+        # Find exception_train regions (building under upgrade — also shows "Không Hoạt Động")
+        exception_matches = self._matcher.match(
+            image, template_name="exception_train", threshold=0.75, max_matches=10
+        )
+
+        for tm in text_matches:
+            tx, ty = tm.center
+            # Skip if this text lies inside any exception_train bbox
+            is_exception = False
+            for em in exception_matches:
+                ex1, ey1, ex2, ey2 = em.bbox
+                if ex1 <= tx <= ex2 and ey1 <= ty <= ey2:
+                    is_exception = True
+                    logger.info(
+                        f"[Train] Skipping 'khong_hoat_dong_text' inside exception_train at {tm.bbox}"
+                    )
+                    break
+            if not is_exception:
+                logger.info(
+                    f"[Train] Detected 'khong_hoat_dong_text' at {tm.bbox} conf={tm.confidence:.2f}"
+                )
+                return tm.bbox
+
+        logger.debug("[Train] All khong_hoat_dong_text matches are inside exception_train")
         return None
 
     def can_execute(self) -> bool:
