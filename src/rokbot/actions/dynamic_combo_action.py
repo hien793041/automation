@@ -34,6 +34,7 @@ class DynamicComboAction(BaseAction):
         self.action_sequence = action_sequence or []
         self._pending_action_name: Optional[str] = None
         self._pending_action_instance: Optional[BaseAction] = None
+        self._action_cache: dict[str, BaseAction] = {}
         self._city_matcher = TemplateMatcher(
             templates_dir=Path("data/templates"),
             threshold=0.80,
@@ -116,7 +117,11 @@ class DynamicComboAction(BaseAction):
         self._pending_action_instance = None
 
         for action_name in self.action_sequence:
-            action = ActionFactory.create(action_name, self.config, self.state_machine)
+            action = self._action_cache.get(action_name)
+            if action is None:
+                action = ActionFactory.create(action_name, self.config, self.state_machine)
+                if action is not None:
+                    self._action_cache[action_name] = action
             if action is None:
                 continue
             try:

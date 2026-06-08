@@ -29,7 +29,7 @@ class GatherGemAction(BaseAction):
     GEM_AVAILABLE_TEMPLATES = ["gem_available0", "gem_available1", "gem_available3", "gem_available4", "gem_available5"]
     MAX_MOVEMENT_STEPS = 20
     MAX_ACTIVE_TROOPS = 4
-    TROOP_STATUS_TEMPLATES = ["gathering", "backing", "moving", "building"]
+    TROOP_STATUS_TEMPLATES = ["gathering", "backing", "moving", "building", "attacking", "attacking1"]
 
     def __init__(self, config: BotConfig, state_machine: Optional["StateMachine"] = None):
         super().__init__(config, state_machine)

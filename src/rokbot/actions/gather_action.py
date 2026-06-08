@@ -29,7 +29,7 @@ class GatherAction(BaseAction):
 
     # Stop gathering when this many troops are already active
     MAX_ACTIVE_TROOPS = 3
-    TROOP_STATUS_TEMPLATES = ["gathering", "backing", "moving", "building"]
+    TROOP_STATUS_TEMPLATES = ["gathering", "backing", "moving", "building", "attacking", "attacking1"]
 
     def __init__(self, config: BotConfig, state_machine: Optional["StateMachine"] = None):
         super().__init__(config, state_machine)

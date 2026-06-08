@@ -36,7 +36,7 @@ class RallyFortAction(BaseAction):
     CITY_ICON_ROI_RATIO: Tuple[float, float, float, float] = (0.75, 0.75, 1.0, 1.0)
 
     MAX_ACTIVE_TROOPS = 4
-    TROOP_STATUS_TEMPLATES = ["gathering", "backing", "moving", "building"]
+    TROOP_STATUS_TEMPLATES = ["gathering", "backing", "moving", "building", "attacking", "attacking1"]
 
     # Cooldown after a failed rally search (no suitable fort found)
     COOLDOWN_SECONDS = (20, 30)
@@ -121,14 +121,29 @@ class RallyFortAction(BaseAction):
 
         gray = cv2.cvtColor(crop, cv2.COLOR_BGR2GRAY)
 
+        # Mask bright pixels (white text) → black text on white background
+        _, bright_mask = cv2.threshold(gray, 180, 255, cv2.THRESH_BINARY)
+        # Invert: text becomes black, background becomes white
+        inverted = cv2.bitwise_not(bright_mask)
+
+        # Skip the left pin icon (~35 px)
+        h, w = inverted.shape
+        pin_width = min(40, w // 3)
+        text_crop = inverted[:, pin_width:]
+
+        # Upscale 2x for better OCR
+        text_crop = cv2.resize(text_crop, None, fx=2, fy=2, interpolation=cv2.INTER_CUBIC)
+
+        # Also try OTSU on the inverted image
+        otsu = cv2.threshold(text_crop, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)[1]
+
+        whitelist = "-c tessedit_char_whitelist=0123456789KMkm "
         candidates = []
         configs = [
-            ("gray_psm6", gray, "--psm 6"),
-            ("gray_psm7", gray, "--psm 7"),
-            ("otsu_psm6", cv2.threshold(gray, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)[1], "--psm 6"),
-            ("otsu_psm7", cv2.threshold(gray, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)[1], "--psm 7"),
-            ("inv_psm6", cv2.threshold(gray, 0, 255, cv2.THRESH_BINARY_INV + cv2.THRESH_OTSU)[1], "--psm 6"),
-            ("inv_psm7", cv2.threshold(gray, 0, 255, cv2.THRESH_BINARY_INV + cv2.THRESH_OTSU)[1], "--psm 7"),
+            ("inv_psm7", text_crop, f"--psm 7 {whitelist}"),
+            ("inv_psm8", text_crop, f"--psm 8 {whitelist}"),
+            ("otsu_psm7", otsu, f"--psm 7 {whitelist}"),
+            ("otsu_psm8", otsu, f"--psm 8 {whitelist}"),
         ]
 
         for name, img, cfg in configs:
@@ -392,11 +407,13 @@ class RallyFortAction(BaseAction):
         chosen_fort = None
         for fm, hm in pairs:
             cx, cy = fm.center
-            # Expand crop around how_far: left/top margin + extend right 100 px to capture the km text
+            # Expand crop around how_far: tight vertical crop to avoid avatar below,
+            # extend right to capture the km text
             hx1, hy1, hx2, hy2 = hm.bbox
-            margin = 10
-            crop = image[max(0, hy1 - margin):min(image.shape[0], hy2 + margin),
-                         max(0, hx1 - margin):min(image.shape[1], hx2 + 100)]
+            margin_y = 3   # tight vertical margin — text is at same height as the pin icon
+            margin_x = 10
+            crop = image[max(0, hy1 - margin_y):min(image.shape[0], hy2 + margin_y),
+                         max(0, hx1 - margin_x):min(image.shape[1], hx2 + 150)]
             km = self._read_km_from_crop(crop, label=f"fort=({cx},{cy})")
             if km == -1:
                 logger.info(f"[RallyFort] Skipping fort_icon at ({cx},{cy}) — km unreadable (OCR failed)")
