@@ -28,7 +28,7 @@ class GatherAction(BaseAction):
     RESOURCE_ICONS = ["wood_icon", "stone_icon", "corn_icon"]
 
     # Stop gathering when this many troops are already active
-    MAX_ACTIVE_TROOPS = 4
+    MAX_ACTIVE_TROOPS = 3
     TROOP_STATUS_TEMPLATES = ["gathering", "backing", "moving", "building", "attacking", "attacking1"]
 
     def __init__(self, config: BotConfig, state_machine: Optional["StateMachine"] = None):

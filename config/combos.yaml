@@ -9,7 +9,7 @@ combos:
     - alliance_help
     - gather
     - train_troops
-    # - rally_fort
+    - rally_fort
   my_combo2:
     - reconnect
     - alliance_help
