@@ -129,12 +129,40 @@ class PCInput:
         pyautogui.typewrite(text, interval=interval)
         logger.debug(f"Typed text: '{text}'")
 
+    def press_key(self, key: str) -> None:
+        """Press and release a keyboard key immediately (one tap)."""
+        pyautogui.press(key)
+        logger.debug(f"Pressed key '{key}'")
+
     def hold_key(self, key: str, duration: float) -> None:
         """Hold a keyboard key for a given duration."""
         pyautogui.keyDown(key)
         time.sleep(duration)
         pyautogui.keyUp(key)
         logger.debug(f"Held key '{key}' for {duration:.2f}s")
+
+    def hold_key_native(self, key: str, duration: float) -> None:
+        """Hold a keyboard key using win32api.keybd_event (bypasses some anti-bot blocks)."""
+        import win32api
+        import win32con
+
+        VK_MAP = {
+            "up": win32con.VK_UP,
+            "down": win32con.VK_DOWN,
+            "left": win32con.VK_LEFT,
+            "right": win32con.VK_RIGHT,
+            "esc": win32con.VK_ESCAPE,
+        }
+        vk = VK_MAP.get(key.lower())
+        if vk is None:
+            logger.warning(f"hold_key_native: unsupported key '{key}', falling back to hold_key")
+            self.hold_key(key, duration)
+            return
+
+        win32api.keybd_event(vk, 0, 0, 0)
+        time.sleep(duration)
+        win32api.keybd_event(vk, 0, win32con.KEYEVENTF_KEYUP, 0)
+        logger.debug(f"Held key '{key}' for {duration:.2f}s (native)")
 
     def move_to_safe_zone(self) -> None:
         """Move mouse to a safe corner to avoid covering UI elements during capture."""

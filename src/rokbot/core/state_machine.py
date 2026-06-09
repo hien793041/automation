@@ -6,6 +6,7 @@ from enum import Enum, auto
 from pathlib import Path
 from typing import Callable, Dict, List, Optional
 
+import pyautogui
 from loguru import logger
 
 from rokbot.actions.action_factory import ActionFactory
@@ -60,6 +61,8 @@ class StateMachine:
         self.context.record_state(BotState.UNKNOWN.name)
         self._session_manager: Optional[SessionManager] = None
         self._decision_engine: Optional[DecisionEngine] = None
+        self._capture_fail_count = 0
+        self._max_capture_failures = 3
         if config.humanization.enabled:
             if config.humanization.schedule_enabled:
                 self._session_manager = SessionManager()
@@ -96,6 +99,10 @@ class StateMachine:
         while self._running:
             try:
                 self._tick()
+            except pyautogui.FailSafeException:
+                logger.error("PyAutoGUI fail-safe triggered (mouse moved to corner) — stopping immediately")
+                self.stop()
+                return
             except StuckError as e:
                 logger.warning(f"Stuck detected: {e}")
                 self._enter_recovery()
@@ -115,6 +122,18 @@ class StateMachine:
 
     def _tick(self) -> None:
         """Single state machine tick."""
+        # Abort early if the game window is gone or minimized
+        if self.pc_input is not None:
+            if not self.pc_input.window_manager.is_window_valid():
+                logger.error("Game window not found — stopping state machine")
+                self.stop()
+                return
+            rect = self.pc_input.window_manager.get_client_rect()
+            if rect is None or (rect[2] - rect[0]) <= 0 or (rect[3] - rect[1]) <= 0:
+                logger.error("Game window has zero size (minimized?) — stopping state machine")
+                self.stop()
+                return
+
         current_state = self.context.current_state or BotState.UNKNOWN.name
 
         # Session / break management
@@ -131,7 +150,15 @@ class StateMachine:
             return
 
         # Dismiss blocking overlays (chat, guides, etc.)
-        self._dismiss_overlays()
+        capture_ok = self._dismiss_overlays()
+        if not capture_ok:
+            self._capture_fail_count += 1
+            if self._capture_fail_count >= self._max_capture_failures:
+                logger.error(f"Capture failed {self._capture_fail_count} consecutive times — stopping")
+                self.stop()
+                return
+        else:
+            self._capture_fail_count = 0
 
         # Check stuck condition
         if self.context.is_stuck(self.config.stuck_threshold_seconds):
@@ -175,13 +202,16 @@ class StateMachine:
                 logger.exception(f"Action {action_name} failed: {e}")
                 action.on_failure(str(e))
 
-    def _dismiss_overlays(self) -> None:
-        """Close chat/guide windows if detected."""
+    def _dismiss_overlays(self) -> bool:
+        """Close chat/guide windows if detected.
+
+        Returns True if capture succeeded, False otherwise.
+        """
         if self.screen_capture is None or self.pc_input is None:
-            return
+            return True
         image = self.screen_capture.capture()
         if image is None:
-            return
+            return False
 
         for template_name, label in [("close_chat", "chat"), ("guide_close", "guide")]:
             matches = self._chat_matcher.match(image, template_name=template_name)
@@ -196,6 +226,7 @@ class StateMachine:
                 time.sleep(random.uniform(0.5, 1.0))
                 # Only dismiss one overlay per tick to avoid mis-clicks
                 break
+        return True
 
     def _infer_next_state(self) -> Optional[str]:
         """Infer next state from detections (placeholder)."""

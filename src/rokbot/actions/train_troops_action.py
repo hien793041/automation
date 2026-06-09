@@ -3,7 +3,7 @@
 import random
 import time
 from pathlib import Path
-from typing import TYPE_CHECKING, Optional, Tuple
+from typing import TYPE_CHECKING, List, Optional, Tuple
 
 import numpy as np
 from loguru import logger
@@ -30,6 +30,7 @@ class TrainTroopsAction(BaseAction, MapNavigationMixin):
     COMPLETED_ICONS = ["t2_bo_completed", "t2_cung_completed", "t1_da_completed", "t2_ngua_completed", "t3_bo_completed"]
     TRAIN_ICONS = ["bo_train", "cung_train", "da_train", "ngua_train"]
     AVAIL_TEMPLATES = ["train_available", "train_available1", "train_available2"]
+    KHD_TEXT_TEMPLATES = ["khong_hoat_dong_text", "khong_hoat_dong_text1", "khong_hoat_dong_text2"]
 
     def __init__(self, config: BotConfig, state_machine: Optional["StateMachine"] = None):
         super().__init__(config, state_machine)
@@ -60,64 +61,87 @@ class TrainTroopsAction(BaseAction, MapNavigationMixin):
         else:
             time.sleep(fallback_seconds)
 
-    def _open_tongquan_and_get_idle_bbox(self, image: np.ndarray) -> Optional[Tuple[int, int, int, int]]:
+    def _open_tongquan_and_get_idle_bboxes(
+        self, image: np.ndarray
+    ) -> List[Tuple[int, int, int, int]]:
         """Open the 'Tong Quan' tab if needed and look for 'khong_hoat_dong_text.png'.
 
-        Returns the bounding box of the text template if found.
+        Returns a list of bounding boxes for idle buildings (outside exception_train).
         """
         # Check if tab is already open
-        opened_matches = self._tab_matcher.match(image, template_name="tongquan_opened", threshold=0.75)
+        opened_matches = self._tab_matcher.match(
+            image, template_name="tongquan_opened", threshold=0.75
+        )
         if not opened_matches:
-            # Try to open the tab
-            tab_matches = self._tab_matcher.match(image, template_name="tongquan", threshold=0.75)
+            tab_matches = self._tab_matcher.match(
+                image, template_name="tongquan", threshold=0.75
+            )
             if tab_matches:
                 tab_btn = max(tab_matches, key=lambda m: m.confidence)
                 tx, ty = self.random_point_in_bbox(tab_btn.bbox)
-                logger.info(f"[Train] Opening Tong Quan tab at ({tx}, {ty}) conf={tab_btn.confidence:.2f}")
+                logger.info(
+                    f"[Train] Opening Tong Quan tab at ({tx}, {ty}) "
+                    f"conf={tab_btn.confidence:.2f}"
+                )
                 self.state_machine.pc_input.tap(tx, ty)
                 time.sleep(random.uniform(1.5, 2.5))
-                # Re-capture after opening
                 self.state_machine.pc_input.move_to_safe_zone()
                 image = self.state_machine.screen_capture.capture()
                 if image is None:
-                    return None
+                    return []
             else:
                 logger.debug("[Train] tongquan icon not found")
-                return None
+                return []
 
-        # Template match for 'Không hoạt động' text
-        text_matches = self._tab_matcher.match(
-            image, template_name="khong_hoat_dong_text", threshold=0.70, max_matches=10
-        )
+        # Lower threshold to catch variants of 'Không hoạt động' text
+        # Restrict search to the top-left panel area to avoid false positives
+        # from chat/UI at the bottom of the screen.
+        h, w = image.shape[:2]
+        panel_roi = (0, 0, int(w * 0.40), int(h * 0.50))
+
+        text_matches = []
+        for khd_name in self.KHD_TEXT_TEMPLATES:
+            matches = self._tab_matcher.match(
+                image, template_name=khd_name, threshold=0.75,
+                max_matches=20, roi=panel_roi,
+            )
+            if matches:
+                text_matches.extend(matches)
+                logger.debug(f"[Train] {khd_name}: found {len(matches)} match(es)")
+
+        # Sort by confidence so best matches are processed first
+        text_matches.sort(key=lambda m: m.confidence, reverse=True)
         if not text_matches:
             logger.debug("[Train] khong_hoat_dong_text not found")
-            return None
+            return []
 
-        # Find exception_train regions (building under upgrade — also shows "Không Hoạt Động")
         exception_matches = self._matcher.match(
             image, template_name="exception_train", threshold=0.75, max_matches=10
         )
 
+        valid_bboxes: List[Tuple[int, int, int, int]] = []
         for tm in text_matches:
             tx, ty = tm.center
-            # Skip if this text lies inside any exception_train bbox
             is_exception = False
             for em in exception_matches:
                 ex1, ey1, ex2, ey2 = em.bbox
                 if ex1 <= tx <= ex2 and ey1 <= ty <= ey2:
                     is_exception = True
                     logger.info(
-                        f"[Train] Skipping 'khong_hoat_dong_text' inside exception_train at {tm.bbox}"
+                        f"[Train] Skipping 'khong_hoat_dong_text' inside exception_train "
+                        f"at {tm.bbox} conf={tm.confidence:.2f}"
                     )
                     break
             if not is_exception:
                 logger.info(
-                    f"[Train] Detected 'khong_hoat_dong_text' at {tm.bbox} conf={tm.confidence:.2f}"
+                    f"[Train] Detected 'khong_hoat_dong_text' at {tm.bbox} "
+                    f"conf={tm.confidence:.2f}"
                 )
-                return tm.bbox
+                valid_bboxes.append(tm.bbox)
 
-        logger.debug("[Train] All khong_hoat_dong_text matches are inside exception_train")
-        return None
+        if not valid_bboxes:
+            logger.debug("[Train] All khong_hoat_dong_text matches are inside exception_train")
+        return valid_bboxes
 
     def can_execute(self) -> bool:
         if self.state_machine is None or self.state_machine.screen_capture is None:
@@ -153,7 +177,7 @@ class TrainTroopsAction(BaseAction, MapNavigationMixin):
                     logger.debug(f"[Train] {completed_name} best conf={best.confidence:.2f} (below 0.70)")
 
         # Check Tong Quan tab for idle buildings
-        if self._open_tongquan_and_get_idle_bbox(image) is not None:
+        if self._open_tongquan_and_get_idle_bboxes(image):
             return True
 
         logger.info("[Train] can_execute: nothing found")
@@ -221,18 +245,22 @@ class TrainTroopsAction(BaseAction, MapNavigationMixin):
                 return True
 
         # 2. Verify idle buildings via Tong Quan tab and click directly on the text
-        idle_bbox = self._open_tongquan_and_get_idle_bbox(image)
-        if idle_bbox is None:
+        idle_bboxes = self._open_tongquan_and_get_idle_bboxes(image)
+        if not idle_bboxes:
             logger.info("[Train] No idle buildings confirmed in Tong Quan")
             return False
 
-        # Click on the 'Không hoạt động' text to jump to the building
+        # Click on the first 'Không hoạt động' text to jump to the building
+        idle_bbox = idle_bboxes[0]
         bx1, by1, bx2, by2 = idle_bbox
         cx = (bx1 + bx2) // 2
         cy = (by1 + by2) // 2
-        logger.info(f"[Train] Step 2/5: Tapping 'Không hoạt động' at ({cx}, {cy})")
+        logger.info(
+            f"[Train] Step 2/5: Tapping 'Không hoạt động' at ({cx}, {cy}) "
+            f"(idle count={len(idle_bboxes)})"
+        )
         self.state_machine.pc_input.tap(cx, cy)
-        time.sleep(random.uniform(2.0, 3.0))  # wait for game to pan to building and open popup
+        time.sleep(random.uniform(2.0, 3.0))
 
         # 4. In popup, find one of the 4 troop type icons
         self.state_machine.pc_input.move_to_safe_zone()

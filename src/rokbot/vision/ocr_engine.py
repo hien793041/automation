@@ -56,8 +56,17 @@ class OCREngine:
         except Exception as e:
             logger.error(f"Tesseract failed to load: {e}")
 
-    def read(self, image: np.ndarray, roi: Optional[Tuple[int, int, int, int]] = None) -> List[OCRResult]:
-        """Read text from image, optionally within an ROI."""
+    def read(
+        self,
+        image: np.ndarray,
+        roi: Optional[Tuple[int, int, int, int]] = None,
+        config: Optional[str] = None,
+    ) -> List[OCRResult]:
+        """Read text from image, optionally within an ROI.
+
+        Args:
+            config: Optional Tesseract config string (e.g. '--psm 7').
+        """
         if self._engine is None:
             logger.warning("OCR engine not loaded; skipping OCR")
             return []
@@ -67,13 +76,16 @@ class OCREngine:
             image = image[y1:y2, x1:x2]
 
         try:
-            return self._read_tesseract(image, roi)
+            return self._read_tesseract(image, roi, config)
         except Exception as e:
             logger.warning(f"OCR read failed: {e}")
             return []
 
     def _read_tesseract(
-        self, image: np.ndarray, roi: Optional[Tuple[int, int, int, int]]
+        self,
+        image: np.ndarray,
+        roi: Optional[Tuple[int, int, int, int]],
+        config: Optional[str] = None,
     ) -> List[OCRResult]:
         results: List[OCRResult] = []
 
@@ -83,10 +95,11 @@ class OCREngine:
         else:
             gray = image
 
+        tess_config = config if config is not None else "--psm 6"
         data = self._engine.image_to_data(
             gray,
             lang=self.lang,
-            config='--psm 6',
+            config=tess_config,
             output_type=self._engine.Output.DICT,
         )
 
@@ -94,7 +107,7 @@ class OCREngine:
         for i in range(n_boxes):
             text = data["text"][i].strip()
             conf = int(data["conf"][i])
-            if not text or conf <= 0:
+            if not text or conf < 0:
                 continue
 
             x, y, w, h = data["left"][i], data["top"][i], data["width"][i], data["height"][i]
