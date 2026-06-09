@@ -12,12 +12,13 @@ from rokbot.actions.base_action import BaseAction
 from rokbot.core.config import BotConfig
 from rokbot.humanization.timing_engine import TimingEngine
 from rokbot.vision.template_matcher import TemplateMatcher
+from rokbot.utils.map_navigation import MapNavigationMixin
 
 if TYPE_CHECKING:
     from rokbot.core.state_machine import StateMachine
 
 
-class BarbarianAttackAction(BaseAction):
+class BarbarianAttackAction(BaseAction, MapNavigationMixin):
     """Action to attack barbarians on the world map."""
 
     TEMPLATES_DIR = Path("data/templates/barbarian")
@@ -52,56 +53,6 @@ class BarbarianAttackAction(BaseAction):
             time.sleep(max(0.05, delay_ms / 1000.0))
         else:
             time.sleep(fallback_seconds)
-
-    def _random_point_in_bbox(self, bbox: Tuple[int, int, int, int]) -> Tuple[int, int]:
-        x1, y1, x2, y2 = bbox
-        px = random.randint(x1, max(x1, x2 - 1))
-        py = random.randint(y1, max(y1, y2 - 1))
-        return (px, py)
-
-    def _roi_from_ratio(self, image: np.ndarray, ratio: Tuple[float, float, float, float]) -> Tuple[int, int, int, int]:
-        h, w = image.shape[:2]
-        x1 = int(w * ratio[0])
-        y1 = int(h * ratio[1])
-        x2 = int(w * ratio[2])
-        y2 = int(h * ratio[3])
-        return (x1, y1, x2, y2)
-
-    def _detect_city_state(self, image: np.ndarray) -> str:
-        roi = self._roi_from_ratio(image, self.CITY_ICON_ROI_RATIO)
-        roi_x1, roi_y1, roi_x2, roi_y2 = roi
-        roi_image = image[roi_y1:roi_y2, roi_x1:roi_x2]
-
-        in_city_matches = self._city_matcher.match(roi_image, template_name="in_city_icon", threshold=0.80)
-        if in_city_matches:
-            return "in_city"
-
-        enter_matches = self._city_matcher.match(roi_image, template_name="enter_city_icon", threshold=0.80)
-        if enter_matches:
-            return "in_world"
-
-        return "unknown"
-
-    def _ensure_in_world(self, image: np.ndarray) -> bool:
-        roi = self._roi_from_ratio(image, self.CITY_ICON_ROI_RATIO)
-        roi_x1, roi_y1, roi_x2, roi_y2 = roi
-        roi_image = image[roi_y1:roi_y2, roi_x1:roi_x2]
-
-        enter_matches = self._city_matcher.match(roi_image, template_name="enter_city_icon", threshold=0.80)
-        if enter_matches:
-            logger.debug("Already in world view")
-            return True
-
-        in_city_matches = self._city_matcher.match(roi_image, template_name="in_city_icon", threshold=0.80)
-        if in_city_matches:
-            best = max(in_city_matches, key=lambda m: m.confidence)
-            bx1, by1, bx2, by2 = best.bbox
-            cx = roi_x1 + random.randint(bx1, max(bx1, bx2 - 1))
-            cy = roi_y1 + random.randint(by1, max(by1, by2 - 1))
-            logger.info(f"[Barbarian] In city — switching to world map at ({cx}, {cy})")
-            self.state_machine.pc_input.tap(cx, cy)
-            time.sleep(random.uniform(1.0, 3.0))
-            return True
 
         logger.warning("Could not determine city/world state")
         return False
@@ -205,7 +156,7 @@ class BarbarianAttackAction(BaseAction):
             logger.debug("Find button not found on world map")
             return False
         find_btn = max(find_matches, key=lambda m: m.confidence)
-        fx, fy = self._random_point_in_bbox(find_btn.bbox)
+        fx, fy = self.random_point_in_bbox(find_btn.bbox)
         logger.info(f"[Barbarian] Step 1/7: Tapping 'Find' on world map at ({fx}, {fy})")
         self.state_machine.pc_input.tap(fx, fy)
         time.sleep(random.uniform(1.0, 3.0))
@@ -220,7 +171,7 @@ class BarbarianAttackAction(BaseAction):
         #     logger.debug("Barbarian select option not found")
         #     return False
         # select_btn = max(select_matches, key=lambda m: m.confidence)
-        # sx, sy = self._random_point_in_bbox(select_btn.bbox)
+        # sx, sy = self.random_point_in_bbox(select_btn.bbox)
         # logger.info(f"[Barbarian] Step 2/7: Tapping 'Select Barbarian' at ({sx}, {sy})")
         # self.state_machine.pc_input.tap(sx, sy)
         # time.sleep(random.uniform(1.0, 3.0))
@@ -235,7 +186,7 @@ class BarbarianAttackAction(BaseAction):
             logger.debug("Menu Find button not found")
             return False
         menu_find_btn = max(menu_find_matches, key=lambda m: m.confidence)
-        mfx, mfy = self._random_point_in_bbox(menu_find_btn.bbox)
+        mfx, mfy = self.random_point_in_bbox(menu_find_btn.bbox)
         logger.info(f"[Barbarian] Step 3/7: Tapping 'Find' in menu at ({mfx}, {mfy})")
         self.state_machine.pc_input.tap(mfx, mfy)
         time.sleep(random.uniform(1.8, 2.2))
@@ -250,7 +201,7 @@ class BarbarianAttackAction(BaseAction):
             logger.debug("Attack button not found")
             return False
         attack_btn = max(attack_matches, key=lambda m: m.confidence)
-        ax, ay = self._random_point_in_bbox(attack_btn.bbox)
+        ax, ay = self.random_point_in_bbox(attack_btn.bbox)
         logger.info(f"[Barbarian] Step 4/7: Tapping 'Attack' at ({ax}, {ay})")
         self.state_machine.pc_input.tap(ax, ay)
         time.sleep(random.uniform(1.0, 3.0))
@@ -265,7 +216,7 @@ class BarbarianAttackAction(BaseAction):
             logger.info("[Barbarian] choose_troop_attack not found")
             return False
         choose_btn = max(choose_matches, key=lambda m: m.confidence)
-        chx, chy = self._random_point_in_bbox(choose_btn.bbox)
+        chx, chy = self.random_point_in_bbox(choose_btn.bbox)
         logger.info(f"[Barbarian] Step 5/7: Tapping 'Choose Troop Attack' at ({chx}, {chy})")
         self.state_machine.pc_input.tap(chx, chy)
         time.sleep(random.uniform(1.0, 3.0))
@@ -286,7 +237,7 @@ class BarbarianAttackAction(BaseAction):
                 break
 
         if existing_btn is not None:
-            ex, ey = self._random_point_in_bbox(existing_btn.bbox)
+            ex, ey = self.random_point_in_bbox(existing_btn.bbox)
             logger.info(f"[Barbarian] Step 6/7: Tapping '{existing_name}' at ({ex}, {ey})")
             self.state_machine.pc_input.tap(ex, ey)
             time.sleep(random.uniform(1.0, 3.0))

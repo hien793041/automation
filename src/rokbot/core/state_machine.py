@@ -13,6 +13,8 @@ from rokbot.core.config import BotConfig
 from rokbot.core.exceptions import RecoveryError, StuckError
 from rokbot.core.state_context import StateContext
 from rokbot.core.state_transitions import TransitionRegistry, TransitionRule
+from rokbot.humanization.decision_engine import DecisionEngine
+from rokbot.humanization.session_manager import SessionManager
 from rokbot.vision.template_matcher import TemplateMatcher
 
 
@@ -46,7 +48,6 @@ class StateMachine:
         self.config = config
         self.context = StateContext(max_retries=config.max_retry_attempts)
         self.transitions = TransitionRegistry()
-        self._state_handlers: Dict[str, Callable] = {}
         self._running = False
         self.pc_input = pc_input
         self.screen_capture = screen_capture
@@ -56,6 +57,19 @@ class StateMachine:
             templates_dir=Path("data/templates"),
             threshold=0.75,
         )
+        self.context.record_state(BotState.UNKNOWN.name)
+        self._session_manager: Optional[SessionManager] = None
+        self._decision_engine: Optional[DecisionEngine] = None
+        if config.humanization.enabled:
+            if config.humanization.schedule_enabled:
+                self._session_manager = SessionManager()
+                self._session_manager.start_session()
+            self._decision_engine = DecisionEngine(
+                fatigue_half_life_hours=config.humanization.fatigue_half_life_hours,
+                base_distraction_rate=config.humanization.base_distraction_rate,
+                base_misclick_rate=config.humanization.base_misclick_rate,
+            )
+            logger.info("Humanization integrated into StateMachine")
 
     def _load_actions(self):
         """Load enabled actions from the factory."""
@@ -72,10 +86,6 @@ class StateMachine:
         def get_priority(name: str) -> int:
             return self.config.actions.priorities.get(name, 999)
         return sorted(self._actions.keys(), key=get_priority)
-
-    def register_handler(self, state: BotState, handler: Callable[["StateMachine"], None]) -> None:
-        """Register a handler function for a state."""
-        self._state_handlers[state.name] = handler
 
     def start(self) -> None:
         """Start the state machine loop."""
@@ -107,12 +117,33 @@ class StateMachine:
         """Single state machine tick."""
         current_state = self.context.current_state or BotState.UNKNOWN.name
 
+        # Session / break management
+        if self._session_manager and not self._session_manager.should_be_active():
+            logger.info("Session manager: outside active hours — sleeping 60s")
+            time.sleep(60)
+            return
+
+        if self._session_manager and self._session_manager.check_break():
+            break_min = self._session_manager.sample_break_minutes()
+            logger.info(f"Session manager: taking a break for {break_min:.0f} minutes")
+            time.sleep(break_min * 60)
+            self._session_manager.start_session()
+            return
+
         # Dismiss blocking overlays (chat, guides, etc.)
         self._dismiss_overlays()
 
         # Check stuck condition
         if self.context.is_stuck(self.config.stuck_threshold_seconds):
             raise StuckError(f"Stuck in {current_state} for {self.context.time_in_current_state():.0f}s")
+
+        # Cognitive state update
+        if self._decision_engine:
+            self._decision_engine.update()
+            if self._decision_engine.is_distracted():
+                delay = self._decision_engine.reaction_time_multiplier() * random.uniform(2, 5)
+                logger.debug(f"Decision engine: distracted — adding {delay:.1f}s delay")
+                time.sleep(delay)
 
         # Determine next state (placeholder for vision integration)
         next_state = self._infer_next_state()
@@ -124,11 +155,6 @@ class StateMachine:
 
         # Evaluate and execute actions by priority
         self._evaluate_and_execute_actions()
-
-        # Execute state handler (legacy, can be removed once all actions are migrated)
-        handler = self._state_handlers.get(current_state)
-        if handler:
-            handler(self)
 
     def _evaluate_and_execute_actions(self) -> None:
         """Run through enabled actions in priority order and execute the first available one."""

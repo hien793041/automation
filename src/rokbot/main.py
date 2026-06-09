@@ -120,7 +120,7 @@ def main() -> int:
         return 1
 
     screen_capture = WindowCapture(window_manager)
-    pc_input = PCInput(window_manager)
+    pc_input = PCInput(window_manager, humanization_config=config.humanization)
     ocr_engine = OCREngine(lang=config.vision.ocr_lang)
 
     # Initialize and start state machine

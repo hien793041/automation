@@ -21,12 +21,13 @@ from loguru import logger
 from rokbot.actions.base_action import BaseAction
 from rokbot.core.config import BotConfig
 from rokbot.vision.template_matcher import TemplateMatcher
+from rokbot.utils.map_navigation import MapNavigationMixin
 
 if TYPE_CHECKING:
     from rokbot.core.state_machine import StateMachine
 
 
-class RallyFortAction(BaseAction):
+class RallyFortAction(BaseAction, MapNavigationMixin):
     """Action to rally a fort.  Must be executed inside the city."""
 
     TEMPLATES_DIR = Path("data/templates/rallyfort")
@@ -67,42 +68,6 @@ class RallyFortAction(BaseAction):
     # ------------------------------------------------------------------
     # Helper methods (shared pattern with GatherGemAction)
     # ------------------------------------------------------------------
-
-    def _random_point_in_bbox(self, bbox: Tuple[int, int, int, int]) -> Tuple[int, int]:
-        x1, y1, x2, y2 = bbox
-        px = random.randint(x1, max(x1, x2 - 1))
-        py = random.randint(y1, max(y1, y2 - 1))
-        return (px, py)
-
-    def _roi_from_ratio(
-        self, image: np.ndarray, ratio: Tuple[float, float, float, float]
-    ) -> Tuple[int, int, int, int]:
-        h, w = image.shape[:2]
-        x1 = int(w * ratio[0])
-        y1 = int(h * ratio[1])
-        x2 = int(w * ratio[2])
-        y2 = int(h * ratio[3])
-        return (x1, y1, x2, y2)
-
-    def _detect_city_state(self, image: np.ndarray) -> str:
-        """Return 'in_city', 'in_world', or 'unknown'."""
-        roi = self._roi_from_ratio(image, self.CITY_ICON_ROI_RATIO)
-        roi_x1, roi_y1, roi_x2, roi_y2 = roi
-        roi_image = image[roi_y1:roi_y2, roi_x1:roi_x2]
-
-        in_city_matches = self._city_matcher.match(
-            roi_image, template_name="in_city_icon", threshold=0.80
-        )
-        if in_city_matches:
-            return "in_city"
-
-        enter_matches = self._city_matcher.match(
-            roi_image, template_name="enter_city_icon", threshold=0.80
-        )
-        if enter_matches:
-            return "in_world"
-
-        return "unknown"
 
     def _read_km_from_crop(self, crop: np.ndarray, label: str = "") -> int:
         """OCR a km crop. Returns the numeric value or -1."""
@@ -196,7 +161,7 @@ class RallyFortAction(BaseAction):
 
         if city_state == "in_world":
             # Click enter_city_icon to go inside
-            roi = self._roi_from_ratio(image, self.CITY_ICON_ROI_RATIO)
+            roi = self.roi_from_ratio(image, self.CITY_ICON_ROI_RATIO)
             roi_x1, roi_y1, roi_x2, roi_y2 = roi
             roi_image = image[roi_y1:roi_y2, roi_x1:roi_x2]
             enter_matches = self._city_matcher.match(
@@ -297,7 +262,7 @@ class RallyFortAction(BaseAction):
                 return False
 
             best = max(matches, key=lambda m: m.confidence)
-            x, y = self._random_point_in_bbox(best.bbox)
+            x, y = self.random_point_in_bbox(best.bbox)
             logger.info(f"[RallyFort] Clicking fort_building1 at ({x}, {y}) conf={best.confidence:.2f}")
             self.state_machine.pc_input.tap(x, y)
             time.sleep(random.uniform(1.0, 2.0))
@@ -318,7 +283,7 @@ class RallyFortAction(BaseAction):
             close_matches = self._matcher.match(image, template_name="close_building", threshold=0.75)
             if close_matches:
                 best_close = max(close_matches, key=lambda m: m.confidence)
-                cx, cy = self._random_point_in_bbox(best_close.bbox)
+                cx, cy = self.random_point_in_bbox(best_close.bbox)
                 logger.info(f"[RallyFort] Clicking close_building at ({cx}, {cy}) conf={best_close.confidence:.2f}")
                 self.state_machine.pc_input.tap(cx, cy)
                 time.sleep(random.uniform(1.0, 2.0))
@@ -391,7 +356,7 @@ class RallyFortAction(BaseAction):
             close_matches = self._matcher.match(image, template_name="close_building", threshold=0.75)
             if close_matches:
                 best_close = max(close_matches, key=lambda m: m.confidence)
-                cx, cy = self._random_point_in_bbox(best_close.bbox)
+                cx, cy = self.random_point_in_bbox(best_close.bbox)
                 logger.info(f"[RallyFort] Clicking close_building at ({cx}, {cy}) conf={best_close.confidence:.2f}")
                 self.state_machine.pc_input.tap(cx, cy)
                 time.sleep(random.uniform(0.5, 1.0))
@@ -423,7 +388,7 @@ class RallyFortAction(BaseAction):
             close_matches = self._matcher.match(image, template_name="close_building", threshold=0.75)
             if close_matches:
                 best_close = max(close_matches, key=lambda m: m.confidence)
-                cx, cy = self._random_point_in_bbox(best_close.bbox)
+                cx, cy = self.random_point_in_bbox(best_close.bbox)
                 logger.info(f"[RallyFort] Clicking close_building at ({cx}, {cy}) conf={best_close.confidence:.2f}")
                 self.state_machine.pc_input.tap(cx, cy)
                 time.sleep(random.uniform(0.5, 1.0))
@@ -433,7 +398,7 @@ class RallyFortAction(BaseAction):
             return False
 
         # Click the chosen fort_icon
-        x, y = self._random_point_in_bbox(chosen_fort.bbox)
+        x, y = self.random_point_in_bbox(chosen_fort.bbox)
         logger.info(f"[RallyFort] Clicking chosen fort_icon at ({x}, {y})")
         self.state_machine.pc_input.tap(x, y)
         time.sleep(random.uniform(1.0, 2.0))
@@ -450,7 +415,7 @@ class RallyFortAction(BaseAction):
             close_matches = self._matcher.match(image, template_name="close_building", threshold=0.75)
             if close_matches:
                 best_close = max(close_matches, key=lambda m: m.confidence)
-                cx, cy = self._random_point_in_bbox(best_close.bbox)
+                cx, cy = self.random_point_in_bbox(best_close.bbox)
                 logger.info(f"[RallyFort] Clicking close_building at ({cx}, {cy}) conf={best_close.confidence:.2f}")
                 self.state_machine.pc_input.tap(cx, cy)
                 time.sleep(random.uniform(0.5, 1.0))
@@ -460,7 +425,7 @@ class RallyFortAction(BaseAction):
             return False
 
         best = max(matches, key=lambda m: m.confidence)
-        x, y = self._random_point_in_bbox(best.bbox)
+        x, y = self.random_point_in_bbox(best.bbox)
         logger.info(f"[RallyFort] Clicking click_to_join at ({x}, {y}) conf={best.confidence:.2f}")
         self.state_machine.pc_input.tap(x, y)
         time.sleep(random.uniform(1.0, 2.0))
@@ -479,7 +444,7 @@ class RallyFortAction(BaseAction):
             return False
 
         best = max(matches, key=lambda m: m.confidence)
-        x, y = self._random_point_in_bbox(best.bbox)
+        x, y = self.random_point_in_bbox(best.bbox)
         logger.info(f"[RallyFort] Clicking new_troop at ({x}, {y}) conf={best.confidence:.2f}")
         self.state_machine.pc_input.tap(x, y)
         time.sleep(random.uniform(1.0, 2.0))
@@ -495,7 +460,7 @@ class RallyFortAction(BaseAction):
             return False
 
         best = max(matches, key=lambda m: m.confidence)
-        x, y = self._random_point_in_bbox(best.bbox)
+        x, y = self.random_point_in_bbox(best.bbox)
         logger.info(f"[RallyFort] Clicking send_troop at ({x}, {y}) conf={best.confidence:.2f}")
         self.state_machine.pc_input.tap(x, y)
         time.sleep(random.uniform(1.0, 2.0))
@@ -506,7 +471,7 @@ class RallyFortAction(BaseAction):
             confirm_matches = self._matcher.match(image, template_name="confirm_send_if_have", threshold=0.75)
             if confirm_matches:
                 best_confirm = max(confirm_matches, key=lambda m: m.confidence)
-                cx, cy = self._random_point_in_bbox(best_confirm.bbox)
+                cx, cy = self.random_point_in_bbox(best_confirm.bbox)
                 logger.info(f"[RallyFort] Clicking confirm_send_if_have at ({cx}, {cy}) conf={best_confirm.confidence:.2f}")
                 self.state_machine.pc_input.tap(cx, cy)
                 time.sleep(random.uniform(1.0, 2.0))

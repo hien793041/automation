@@ -10,12 +10,13 @@ from loguru import logger
 from rokbot.actions.base_action import BaseAction
 from rokbot.core.config import BotConfig
 from rokbot.vision.template_matcher import TemplateMatcher
+from rokbot.utils.map_navigation import MapNavigationMixin
 
 if TYPE_CHECKING:
     from rokbot.core.state_machine import StateMachine
 
 
-class VillagerHelpAction(BaseAction):
+class VillagerHelpAction(BaseAction, MapNavigationMixin):
     """Tap a villager and confirm to help them."""
 
     TEMPLATES_DIR = Path("data/templates")
@@ -28,12 +29,6 @@ class VillagerHelpAction(BaseAction):
             templates_dir=self.TEMPLATES_DIR,
             threshold=0.75,
         )
-
-    def _random_point_in_bbox(self, bbox: Tuple[int, int, int, int]) -> Tuple[int, int]:
-        x1, y1, x2, y2 = bbox
-        px = random.randint(x1, max(x1, x2 - 1))
-        py = random.randint(y1, max(y1, y2 - 1))
-        return (px, py)
 
     def can_execute(self) -> bool:
         if self.state_machine is None or self.state_machine.screen_capture is None:
@@ -97,7 +92,7 @@ class VillagerHelpAction(BaseAction):
         confirm_matches = self._matcher.match(confirm_image, template_name=self.CONFIRM_TEMPLATE, threshold=0.75)
         if confirm_matches:
             confirm_btn = max(confirm_matches, key=lambda m: m.confidence)
-            cfx, cfy = self._random_point_in_bbox(confirm_btn.bbox)
+            cfx, cfy = self.random_point_in_bbox(confirm_btn.bbox)
             logger.info(f"[Villager] Step 2/2: Tapping confirm at ({cfx}, {cfy})")
             self.state_machine.pc_input.tap(cfx, cfy)
             time.sleep(random.uniform(1.0, 3.0))

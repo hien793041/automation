@@ -65,8 +65,10 @@ class MovementEngine:
 
         points = self._quadratic_bezier(p0, p1, p2, num_points)
 
-        # Add micro-jitter
+        # Add micro-jitter (skip first and last points to preserve exact targets)
         jitter = np.random.normal(0, self.jitter_sigma, points.shape)
+        jitter[0] = 0
+        jitter[-1] = 0
         points = points + jitter
 
         # Convert to integer tuples

@@ -14,12 +14,13 @@ from loguru import logger
 from rokbot.actions.base_action import BaseAction
 from rokbot.core.config import BotConfig
 from rokbot.vision.template_matcher import TemplateMatcher
+from rokbot.utils.map_navigation import MapNavigationMixin
 
 if TYPE_CHECKING:
     from rokbot.core.state_machine import StateMachine
 
 
-class GatherGemAction(BaseAction):
+class GatherGemAction(BaseAction, MapNavigationMixin):
     """Action to gather gems. Flow differs from standard resource gathering."""
 
     TEMPLATES_DIR = Path("data/templates/gathergem")
@@ -45,35 +46,6 @@ class GatherGemAction(BaseAction):
             templates_dir=Path("data/templates/shared/troops"),
             threshold=0.75,
         )
-
-    def _random_point_in_bbox(self, bbox: Tuple[int, int, int, int]) -> Tuple[int, int]:
-        x1, y1, x2, y2 = bbox
-        px = random.randint(x1, max(x1, x2 - 1))
-        py = random.randint(y1, max(y1, y2 - 1))
-        return (px, py)
-
-    def _roi_from_ratio(self, image: np.ndarray, ratio: Tuple[float, float, float, float]) -> Tuple[int, int, int, int]:
-        h, w = image.shape[:2]
-        x1 = int(w * ratio[0])
-        y1 = int(h * ratio[1])
-        x2 = int(w * ratio[2])
-        y2 = int(h * ratio[3])
-        return (x1, y1, x2, y2)
-
-    def _detect_city_state(self, image: np.ndarray) -> str:
-        roi = self._roi_from_ratio(image, self.CITY_ICON_ROI_RATIO)
-        roi_x1, roi_y1, roi_x2, roi_y2 = roi
-        roi_image = image[roi_y1:roi_y2, roi_x1:roi_x2]
-
-        in_city_matches = self._city_matcher.match(roi_image, template_name="in_city_icon", threshold=0.80)
-        if in_city_matches:
-            return "in_city"
-
-        enter_matches = self._city_matcher.match(roi_image, template_name="enter_city_icon", threshold=0.80)
-        if enter_matches:
-            return "in_world"
-
-        return "unknown"
 
     def _hold_click_at(self, x: int, y: int, duration: float) -> None:
         """Hold mouse click at window-relative coordinates."""
@@ -154,7 +126,7 @@ class GatherGemAction(BaseAction):
                 logger.warning(f"[GatherGem] {tpl_name} not found — aborting sequence")
                 return False
             best = max(matches, key=lambda m: m.confidence)
-            x, y = self._random_point_in_bbox(best.bbox)
+            x, y = self.random_point_in_bbox(best.bbox)
             logger.info(f"[GatherGem] {label} at ({x}, {y}) conf={best.confidence:.2f}")
             self.state_machine.pc_input.tap(x, y)
             time.sleep(random.uniform(0.8, 1.5))
@@ -184,7 +156,7 @@ class GatherGemAction(BaseAction):
             logger.info("[GatherGem] city_center not found")
             return False
         best = max(matches, key=lambda m: m.confidence)
-        cx, cy = self._random_point_in_bbox(best.bbox)
+        cx, cy = self.random_point_in_bbox(best.bbox)
         logger.info(f"[GatherGem] Clicking city_center at ({cx}, {cy}) conf={best.confidence:.2f}")
         self.state_machine.pc_input.tap(cx, cy)
         time.sleep(random.uniform(1.0, 2.0))
@@ -199,7 +171,7 @@ class GatherGemAction(BaseAction):
             return False
 
         # Find enter_city_icon
-        roi = self._roi_from_ratio(image, self.CITY_ICON_ROI_RATIO)
+        roi = self.roi_from_ratio(image, self.CITY_ICON_ROI_RATIO)
         roi_x1, roi_y1, roi_x2, roi_y2 = roi
         roi_image = image[roi_y1:roi_y2, roi_x1:roi_x2]
         enter_matches = self._city_matcher.match(roi_image, template_name="enter_city_icon", threshold=0.80)
@@ -224,7 +196,7 @@ class GatherGemAction(BaseAction):
             logger.info("[GatherGem] resource_button not found")
             return False
         resource_btn = max(resource_matches, key=lambda m: m.confidence)
-        rx, ry = self._random_point_in_bbox(resource_btn.bbox)
+        rx, ry = self.random_point_in_bbox(resource_btn.bbox)
         import pyautogui
         rect = self.state_machine.pc_input.window_manager.get_client_rect()
         if rect:
@@ -295,7 +267,7 @@ class GatherGemAction(BaseAction):
 
         city_state = self._detect_city_state(image)
         if city_state == "in_city":
-            roi = self._roi_from_ratio(image, self.CITY_ICON_ROI_RATIO)
+            roi = self.roi_from_ratio(image, self.CITY_ICON_ROI_RATIO)
             roi_x1, roi_y1, roi_x2, roi_y2 = roi
             roi_image = image[roi_y1:roi_y2, roi_x1:roi_x2]
             in_matches = self._city_matcher.match(roi_image, template_name="in_city_icon", threshold=0.80)

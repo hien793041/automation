@@ -11,13 +11,14 @@ from loguru import logger
 from rokbot.actions.base_action import BaseAction
 from rokbot.core.config import BotConfig
 from rokbot.humanization.timing_engine import TimingEngine
+from rokbot.utils.map_navigation import MapNavigationMixin
 from rokbot.vision.template_matcher import TemplateMatcher
 
 if TYPE_CHECKING:
     from rokbot.core.state_machine import StateMachine
 
 
-class TrainTroopsAction(BaseAction):
+class TrainTroopsAction(BaseAction, MapNavigationMixin):
     """Action to train troops by tapping training buildings."""
 
     TEMPLATES_DIR = Path("data/templates/train")
@@ -59,60 +60,6 @@ class TrainTroopsAction(BaseAction):
         else:
             time.sleep(fallback_seconds)
 
-    def _random_point_in_bbox(self, bbox: Tuple[int, int, int, int]) -> Tuple[int, int]:
-        x1, y1, x2, y2 = bbox
-        px = random.randint(x1, max(x1, x2 - 1))
-        py = random.randint(y1, max(y1, y2 - 1))
-        return (px, py)
-
-    def _roi_from_ratio(self, image: np.ndarray, ratio: Tuple[float, float, float, float]) -> Tuple[int, int, int, int]:
-        h, w = image.shape[:2]
-        x1 = int(w * ratio[0])
-        y1 = int(h * ratio[1])
-        x2 = int(w * ratio[2])
-        y2 = int(h * ratio[3])
-        return (x1, y1, x2, y2)
-
-    def _ensure_in_city(self, image: np.ndarray) -> bool:
-        roi = self._roi_from_ratio(image, self.CITY_ICON_ROI_RATIO)
-        roi_x1, roi_y1, roi_x2, roi_y2 = roi
-        roi_image = image[roi_y1:roi_y2, roi_x1:roi_x2]
-
-        in_city_matches = self._city_matcher.match(roi_image, template_name="in_city_icon", threshold=0.80)
-        if in_city_matches:
-            best = max(in_city_matches, key=lambda m: m.confidence)
-            logger.debug(f"Already in city view (in_city_icon conf={best.confidence:.2f})")
-            return True
-
-        enter_matches = self._city_matcher.match(roi_image, template_name="enter_city_icon", threshold=0.80)
-        if enter_matches:
-            best = max(enter_matches, key=lambda m: m.confidence)
-            bx1, by1, bx2, by2 = best.bbox
-            cx = roi_x1 + random.randint(bx1, max(bx1, bx2 - 1))
-            cy = roi_y1 + random.randint(by1, max(by1, by2 - 1))
-            logger.info(f"[Train] In world — entering city at ({cx}, {cy})")
-            self.state_machine.pc_input.tap(cx, cy)
-            time.sleep(random.uniform(1.0, 3.0))
-            return True
-
-        logger.warning("Could not determine city/world state")
-        return False
-
-    def _detect_city_state(self, image: np.ndarray) -> str:
-        roi = self._roi_from_ratio(image, self.CITY_ICON_ROI_RATIO)
-        roi_x1, roi_y1, roi_x2, roi_y2 = roi
-        roi_image = image[roi_y1:roi_y2, roi_x1:roi_x2]
-
-        in_city_matches = self._city_matcher.match(roi_image, template_name="in_city_icon", threshold=0.80)
-        if in_city_matches:
-            return "in_city"
-
-        enter_matches = self._city_matcher.match(roi_image, template_name="enter_city_icon", threshold=0.80)
-        if enter_matches:
-            return "in_world"
-
-        return "unknown"
-
     def _open_tongquan_and_get_idle_bbox(self, image: np.ndarray) -> Optional[Tuple[int, int, int, int]]:
         """Open the 'Tong Quan' tab if needed and look for 'khong_hoat_dong_text.png'.
 
@@ -125,7 +72,7 @@ class TrainTroopsAction(BaseAction):
             tab_matches = self._tab_matcher.match(image, template_name="tongquan", threshold=0.75)
             if tab_matches:
                 tab_btn = max(tab_matches, key=lambda m: m.confidence)
-                tx, ty = self._random_point_in_bbox(tab_btn.bbox)
+                tx, ty = self.random_point_in_bbox(tab_btn.bbox)
                 logger.info(f"[Train] Opening Tong Quan tab at ({tx}, {ty}) conf={tab_btn.confidence:.2f}")
                 self.state_machine.pc_input.tap(tx, ty)
                 time.sleep(random.uniform(1.5, 2.5))
@@ -267,8 +214,8 @@ class TrainTroopsAction(BaseAction):
             completed_matches = self._matcher.match(image, template_name=completed_name, threshold=0.75)
             if completed_matches:
                 completed_btn = max(completed_matches, key=lambda m: m.confidence)
-                cx, cy = self._random_point_in_bbox(completed_btn.bbox)
-                logger.info(f"[Train] Step 1/3: Collecting {completed_name} at ({cx}, {cy})")
+                cx, cy = self.random_point_in_bbox(completed_btn.bbox)
+                logger.info(f"[Train] Step 1/5: Collecting {completed_name} at ({cx}, {cy})")
                 self.state_machine.pc_input.tap(cx, cy)
                 time.sleep(random.uniform(1.0, 3.0))
                 return True
@@ -283,7 +230,7 @@ class TrainTroopsAction(BaseAction):
         bx1, by1, bx2, by2 = idle_bbox
         cx = (bx1 + bx2) // 2
         cy = (by1 + by2) // 2
-        logger.info(f"[Train] Step 2/3: Tapping 'Không hoạt động' at ({cx}, {cy})")
+        logger.info(f"[Train] Step 2/5: Tapping 'Không hoạt động' at ({cx}, {cy})")
         self.state_machine.pc_input.tap(cx, cy)
         time.sleep(random.uniform(2.0, 3.0))  # wait for game to pan to building and open popup
 
@@ -314,8 +261,8 @@ class TrainTroopsAction(BaseAction):
                 time.sleep(random.uniform(1.0, 3.0))
             return False
 
-        tx, ty = self._random_point_in_bbox(train_match.bbox)
-        logger.info(f"[Train] Step 4/6: Tapping '{train_name}' at ({tx}, {ty})")
+        tx, ty = self.random_point_in_bbox(train_match.bbox)
+        logger.info(f"[Train] Step 3/5: Tapping '{train_name}' at ({tx}, {ty})")
         self.state_machine.pc_input.tap(tx, ty)
         time.sleep(random.uniform(1.0, 3.0))
 
@@ -329,8 +276,8 @@ class TrainTroopsAction(BaseAction):
         selected_matches = self._matcher.match(selected_image, template_name=selected_name, threshold=0.75)
         if selected_matches:
             selected_btn = max(selected_matches, key=lambda m: m.confidence)
-            sx, sy = self._random_point_in_bbox(selected_btn.bbox)
-            logger.info(f"[Train] Step 5/6: Tapping '{selected_name}' at ({sx}, {sy})")
+            sx, sy = self.random_point_in_bbox(selected_btn.bbox)
+            logger.info(f"[Train] Step 4/5: Tapping '{selected_name}' at ({sx}, {sy})")
             self.state_machine.pc_input.tap(sx, sy)
             time.sleep(random.uniform(1.0, 3.0))
         else:
@@ -345,8 +292,8 @@ class TrainTroopsAction(BaseAction):
         confirm_matches = self._matcher.match(confirm_image, template_name="train_confirm", threshold=0.75)
         if confirm_matches:
             confirm_btn = max(confirm_matches, key=lambda m: m.confidence)
-            cfx, cfy = self._random_point_in_bbox(confirm_btn.bbox)
-            logger.info(f"[Train] Step 6/6: Tapping train_confirm at ({cfx}, {cfy})")
+            cfx, cfy = self.random_point_in_bbox(confirm_btn.bbox)
+            logger.info(f"[Train] Step 5/5: Tapping train_confirm at ({cfx}, {cfy})")
             self.state_machine.pc_input.tap(cfx, cfy)
             time.sleep(random.uniform(1.0, 3.0))
             return True
@@ -356,7 +303,7 @@ class TrainTroopsAction(BaseAction):
         close_matches = self._matcher.match(confirm_image, template_name="close_popup")
         if close_matches:
             close_btn = max(close_matches, key=lambda m: m.confidence)
-            clx, cly = self._random_point_in_bbox(close_btn.bbox)
+            clx, cly = self.random_point_in_bbox(close_btn.bbox)
             logger.info(f"[Train] Closing popup at ({clx}, {cly})")
             self.state_machine.pc_input.tap(clx, cly)
             time.sleep(random.uniform(1.0, 3.0))

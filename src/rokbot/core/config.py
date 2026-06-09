@@ -28,6 +28,7 @@ class HumanizationConfig(BaseModel):
     """Humanization engine configuration."""
 
     enabled: bool = Field(default=True)
+    schedule_enabled: bool = Field(default=False)
     profile_path: Optional[Path] = None
     reaction_time_mu: float = Field(default=350.0)  # ms
     reaction_time_sigma: float = Field(default=80.0)  # ms

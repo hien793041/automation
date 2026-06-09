@@ -16,8 +16,11 @@ python = "^3.11"
 # Vision
 opencv-python = "^4.8.1"
 ultralytics = "^8.0.0"
-paddleocr = "^2.7.0"
-paddlepaddle = "^2.5.0"
+pytesseract = "^0.3.13"
+
+# PC input
+pyautogui = "^0.9.54"
+pywin32 = "^300"
 
 # Scientific
 numpy = "^1.24.0"

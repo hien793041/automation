@@ -6,8 +6,8 @@ yolo:
   half: false
 
 ocr:
-  engine: paddleocr
-  lang: en
+  engine: pytesseract
+  lang: eng+vie
   use_gpu: false
   drop_score: 0.5
 

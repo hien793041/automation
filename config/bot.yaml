@@ -16,6 +16,9 @@ vision:
 
 humanization:
   enabled: true
+  # Set to true to enable session scheduling (work/evening/sleep hours with randomness).
+  # When false, timing/movement/misclick humanization still works but bot won't random-sleep.
+  schedule_enabled: false
   profile_path: null
   reaction_time_mu: 350.0
   reaction_time_sigma: 80.0
