@@ -212,6 +212,8 @@ class GatherGemAction(BaseAction, MapNavigationMixin):
             ("send_troop", "Clicking send_troop"),
         ]
         for tpl_name, label in steps:
+            self.state_machine.pc_input.move_to_safe_zone()
+            self.pre_action_delay()
             image = self.state_machine.screen_capture.capture()
             if image is None:
                 logger.warning(f"[GatherGem] Screenshot failed during {tpl_name}")
@@ -221,10 +223,10 @@ class GatherGemAction(BaseAction, MapNavigationMixin):
                 logger.warning(f"[GatherGem] {tpl_name} not found — aborting sequence")
                 return False
             best = max(matches, key=lambda m: m.confidence)
-            x, y = self.random_point_in_bbox(best.bbox)
+            x, y = self.random_point_in_bbox(best.bbox, jitter_sigma=1.0, edge_margin=2)
             logger.info(f"[GatherGem] {label} at ({x}, {y}) conf={best.confidence:.2f}")
             self.state_machine.pc_input.tap(x, y)
-            time.sleep(random.uniform(0.8, 1.5))
+            self.human_delay("click_interval", fallback_seconds=1.0)
         logger.info("[GatherGem] Gather sequence completed successfully")
         return True
 
@@ -236,13 +238,14 @@ class GatherGemAction(BaseAction, MapNavigationMixin):
             cx, cy = gem.center
             logger.info(f"[GatherGem] Clicking gem_available center at ({cx}, {cy})")
             self.state_machine.pc_input.tap(cx, cy)
-            time.sleep(random.uniform(1.0, 2.0))
+            self.human_delay("menu_wait", fallback_seconds=1.5)
             return self._click_gather_sequence()
         return False
 
     def _click_city_center(self) -> bool:
         """Click city_center to reset camera to the city center."""
         self.state_machine.pc_input.move_to_safe_zone()
+        self.pre_action_delay()
         image = self.state_machine.screen_capture.capture()
         if image is None:
             return False
@@ -251,15 +254,16 @@ class GatherGemAction(BaseAction, MapNavigationMixin):
             logger.info("[GatherGem] city_center not found")
             return False
         best = max(matches, key=lambda m: m.confidence)
-        cx, cy = self.random_point_in_bbox(best.bbox)
+        cx, cy = self.random_point_in_bbox(best.bbox, jitter_sigma=1.0, edge_margin=2)
         logger.info(f"[GatherGem] Clicking city_center at ({cx}, {cy}) conf={best.confidence:.2f}")
         self.state_machine.pc_input.tap(cx, cy)
-        time.sleep(random.uniform(1.0, 2.0))
+        self.human_delay("transition_wait", fallback_seconds=1.5)
         return True
 
     def _open_resource_menu(self) -> bool:
         """Hold-click enter_city_icon and click resource_button to open the resource menu."""
         self.state_machine.pc_input.move_to_safe_zone()
+        self.pre_action_delay()
         image = self.state_machine.screen_capture.capture()
         if image is None:
             return False
@@ -280,7 +284,7 @@ class GatherGemAction(BaseAction, MapNavigationMixin):
         abs_ey = roi_y1 + (ey1 + ey2) // 2
         self._hold_click_at(abs_ex, abs_ey, 3.0)
 
-        time.sleep(0.5)
+        self.human_delay("reaction_time", fallback_seconds=0.5)
         image = self.state_machine.screen_capture.capture()
         if image is None:
             return False
@@ -292,14 +296,14 @@ class GatherGemAction(BaseAction, MapNavigationMixin):
             logger.info("[GatherGem] resource_button not found")
             return False
         resource_btn = max(resource_matches, key=lambda m: m.confidence)
-        rx, ry = self.random_point_in_bbox(resource_btn.bbox)
+        rx, ry = self.random_point_in_bbox(resource_btn.bbox, jitter_sigma=1.0, edge_margin=2)
         import pyautogui
 
         rect = self.state_machine.pc_input.window_manager.get_client_rect()
         if rect:
             left, top, _, _ = rect
             pyautogui.moveTo(left + rx, top + ry, duration=0)
-        time.sleep(1.5)
+        self.human_delay("menu_wait", fallback_seconds=1.5)
 
         bx1, by1, _, _ = resource_btn.bbox
         self.state_machine.pc_input.tap(bx1, by1)
@@ -390,6 +394,8 @@ class GatherGemAction(BaseAction, MapNavigationMixin):
         if self.state_machine is None or self.state_machine.screen_capture is None:
             return False
 
+        self.state_machine.pc_input.move_to_safe_zone()
+        self.pre_action_delay()
         image = self.state_machine.screen_capture.capture()
         if image is None:
             return False
@@ -421,6 +427,7 @@ class GatherGemAction(BaseAction, MapNavigationMixin):
 
         # ---- 1. Ensure world view -------------------------------------
         self.state_machine.pc_input.move_to_safe_zone()
+        self.pre_action_delay()
         image = self.state_machine.screen_capture.capture()
         if image is None:
             self.on_failure("Screenshot failed")
@@ -441,7 +448,7 @@ class GatherGemAction(BaseAction, MapNavigationMixin):
                 cy = roi_y1 + (iy1 + iy2) // 2
                 logger.info(f"[GatherGem] In city — switching to world at ({cx}, {cy})")
                 self.state_machine.pc_input.tap(cx, cy)
-                time.sleep(random.uniform(1.0, 3.0))
+                self.human_delay("transition_wait", fallback_seconds=2.0)
 
         # ---- 2. Reset to city center ----------------------------------
         logger.info("[GatherGem] Clicking city_center to reset position")
@@ -459,7 +466,7 @@ class GatherGemAction(BaseAction, MapNavigationMixin):
         max_backtracks = 30  # safety valve
 
         for step in range(self.MAX_MOVEMENT_STEPS):
-            time.sleep(1.5)
+            self.human_delay("reaction_time", fallback_seconds=1.5)
             image = self.state_machine.screen_capture.capture()
             if image is None:
                 # fallback: random move when capture fails
@@ -467,7 +474,7 @@ class GatherGemAction(BaseAction, MapNavigationMixin):
                 logger.info(f"[GatherGem] Capture failed — moving {direction}")
                 hold_dur = random.uniform(walker.HOLD_DURATION_MIN, walker.HOLD_DURATION_MAX)
                 self.state_machine.pc_input.hold_key_native(direction, hold_dur)
-                time.sleep(random.uniform(1.8, 2.2))
+                self.human_delay("transition_wait", fallback_seconds=2.0)
                 walker.move(direction)
                 continue
 
@@ -479,7 +486,7 @@ class GatherGemAction(BaseAction, MapNavigationMixin):
                     cx, cy = gem.center
                     logger.info(f"[GatherGem] Clicking gem_available at ({cx}, {cy})")
                     self.state_machine.pc_input.tap(cx, cy)
-                    time.sleep(random.uniform(1.0, 2.0))
+                    self.human_delay("menu_wait", fallback_seconds=1.5)
 
                     if self._click_gather_sequence():
                         logger.info("[GatherGem] Troop sent — returning to city center")
@@ -512,7 +519,7 @@ class GatherGemAction(BaseAction, MapNavigationMixin):
                     if bt:
                         hold_dur = random.uniform(walker.HOLD_DURATION_MIN, walker.HOLD_DURATION_MAX)
                         self.state_machine.pc_input.hold_key_native(bt, hold_dur)
-                        time.sleep(random.uniform(1.8, 2.2))
+                        self.human_delay("transition_wait", fallback_seconds=2.0)
                     continue
 
             # --- C. Pick next direction --------------------------------
@@ -542,20 +549,20 @@ class GatherGemAction(BaseAction, MapNavigationMixin):
                 )
                 hold_dur = random.uniform(walker.HOLD_DURATION_MIN, walker.HOLD_DURATION_MAX)
                 self.state_machine.pc_input.hold_key_native(bt, hold_dur)
-                time.sleep(random.uniform(1.8, 2.2))
+                self.human_delay("transition_wait", fallback_seconds=2.0)
                 continue
 
             # Humanization: reaction delay before pressing key (thinking time)
-            time.sleep(random.uniform(walker.REACTION_DELAY_MIN, walker.REACTION_DELAY_MAX))
+            self.human_delay("reaction_time", fallback_seconds=0.25)
             hold_dur = random.uniform(walker.HOLD_DURATION_MIN, walker.HOLD_DURATION_MAX)
             self.state_machine.pc_input.hold_key_native(direction, hold_dur)
-            time.sleep(random.uniform(1.8, 2.2))
+            self.human_delay("transition_wait", fallback_seconds=2.0)
 
             # Humanization: occasional long pause (looking around the map)
             if random.random() < walker.LONG_PAUSE_CHANCE:
                 pause = random.uniform(walker.LONG_PAUSE_MIN, walker.LONG_PAUSE_MAX)
                 logger.info(f"[GatherGem] Humanization: long pause {pause:.1f}s to look around")
-                time.sleep(pause)
+                self.human_delay("decision_time", fallback_seconds=pause, min_seconds=pause)
 
             # Humanization: double-step (occasionally hold a bit longer = 2 tiles)
             if random.random() < walker.DOUBLE_STEP_CHANCE:
@@ -568,7 +575,7 @@ class GatherGemAction(BaseAction, MapNavigationMixin):
                     logger.info(f"[GatherGem] Humanization: double-step {direction} | pos={walker.current_pos}")
                     hold_dur = random.uniform(walker.HOLD_DURATION_MIN, walker.HOLD_DURATION_MAX)
                     self.state_machine.pc_input.hold_key_native(direction, hold_dur)
-                    time.sleep(random.uniform(1.8, 2.2))
+                    self.human_delay("transition_wait", fallback_seconds=2.0)
 
         logger.info("[GatherGem] No gems found after max movement steps")
         return False

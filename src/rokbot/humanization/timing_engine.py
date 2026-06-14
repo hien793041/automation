@@ -28,6 +28,9 @@ class TimingEngine:
             "click_interval": {"type": "log_normal", "shape": 0.8, "scale": 1.2},
             "decision_time": {"type": "gaussian", "mu": 600.0, "sigma": 200.0},
             "break_duration": {"type": "exponential", "lambda": 0.004},  # ~250s mean
+            "transition_wait": {"type": "gaussian", "mu": 1800.0, "sigma": 400.0},  # map transitions
+            "menu_wait": {"type": "gaussian", "mu": 1200.0, "sigma": 300.0},  # menu/popup settle
+            "post_error_wait": {"type": "gaussian", "mu": 2500.0, "sigma": 600.0},  # after ESC/error
         }
 
     def load_profile(self, path: Path) -> None:

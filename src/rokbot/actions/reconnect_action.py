@@ -1,9 +1,7 @@
 """Reconnect action for handling connection lost / disconnect."""
 
-import random
-import time
 from pathlib import Path
-from typing import TYPE_CHECKING, Optional, Tuple
+from typing import TYPE_CHECKING, Optional
 
 from loguru import logger
 
@@ -34,6 +32,7 @@ class ReconnectAction(BaseAction, MapNavigationMixin):
             return False
 
         self.state_machine.pc_input.move_to_safe_zone()
+        self.pre_action_delay()
         image = self.state_machine.screen_capture.capture()
         if image is None:
             return False
@@ -59,6 +58,7 @@ class ReconnectAction(BaseAction, MapNavigationMixin):
             return False
 
         self.state_machine.pc_input.move_to_safe_zone()
+        self.pre_action_delay()
         image = self.state_machine.screen_capture.capture()
         if image is None:
             self.on_failure("Screenshot failed")
@@ -70,8 +70,9 @@ class ReconnectAction(BaseAction, MapNavigationMixin):
             return False
 
         btn = max(matches, key=lambda m: m.confidence)
-        rx, ry = self.random_point_in_bbox(btn.bbox)
+        rx, ry = self.random_point_in_bbox(btn.bbox, jitter_sigma=1.0, edge_margin=2)
         logger.info(f"[Reconnect] Tapping reconnect at ({rx}, {ry})")
         self.state_machine.pc_input.tap(rx, ry)
-        time.sleep(random.uniform(3.0, 5.0))  # wait for game to reload
+        # Reconnect needs a long, stable wait for the game to reload.
+        self.human_delay("transition_wait", fallback_seconds=4.0, min_seconds=3.0)
         return True

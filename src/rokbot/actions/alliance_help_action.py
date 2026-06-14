@@ -1,11 +1,8 @@
 """Alliance help action using template matching."""
 
-import random
-import time
 from pathlib import Path
 from typing import TYPE_CHECKING, Optional, Tuple
 
-import numpy as np
 from loguru import logger
 
 from rokbot.actions.base_action import BaseAction
@@ -36,6 +33,7 @@ class AllianceHelpAction(BaseAction, MapNavigationMixin):
             return False
 
         self.state_machine.pc_input.move_to_safe_zone()
+        self.pre_action_delay()
         image = self.state_machine.screen_capture.capture()
         if image is None:
             return False
@@ -63,15 +61,16 @@ class AllianceHelpAction(BaseAction, MapNavigationMixin):
             return False
 
         if self._pending_bbox is not None:
-            hx, hy = self.random_point_in_bbox(self._pending_bbox)
+            hx, hy = self.random_point_in_bbox(self._pending_bbox, jitter_sigma=1.0, edge_margin=2)
             logger.info(f"[Help] Tapping help_btn at ({hx}, {hy})")
             self.state_machine.pc_input.tap(hx, hy)
             self._pending_bbox = None
-            time.sleep(random.uniform(1.0, 3.0))
+            self.human_delay("click_interval", fallback_seconds=1.5)
             return True
 
         # Fallback: re-find if pending was lost
         self.state_machine.pc_input.move_to_safe_zone()
+        self.pre_action_delay()
         image = self.state_machine.screen_capture.capture()
         if image is None:
             self.on_failure("Screenshot failed")
@@ -83,8 +82,8 @@ class AllianceHelpAction(BaseAction, MapNavigationMixin):
             return False
 
         btn = max(matches, key=lambda m: m.confidence)
-        hx, hy = self.random_point_in_bbox(btn.bbox)
+        hx, hy = self.random_point_in_bbox(btn.bbox, jitter_sigma=1.0, edge_margin=2)
         logger.info(f"[Help] Tapping help_btn at ({hx}, {hy})")
         self.state_machine.pc_input.tap(hx, hy)
-        time.sleep(random.uniform(1.0, 3.0))
+        self.human_delay("click_interval", fallback_seconds=1.5)
         return True

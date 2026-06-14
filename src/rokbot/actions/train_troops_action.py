@@ -1,7 +1,6 @@
 """Train troops action for producing units in the city."""
 
 import random
-import time
 from pathlib import Path
 from typing import TYPE_CHECKING, List, Optional, Tuple
 
@@ -10,7 +9,6 @@ from loguru import logger
 
 from rokbot.actions.base_action import BaseAction
 from rokbot.core.config import BotConfig
-from rokbot.humanization.timing_engine import TimingEngine
 from rokbot.utils.map_navigation import MapNavigationMixin
 from rokbot.vision.template_matcher import TemplateMatcher
 
@@ -31,6 +29,7 @@ class TrainTroopsAction(BaseAction, MapNavigationMixin):
     TRAIN_ICONS = ["bo_train", "cung_train", "da_train", "ngua_train"]
     AVAIL_TEMPLATES = ["train_available", "train_available1", "train_available2"]
     KHD_TEXT_TEMPLATES = ["khong_hoat_dong_text", "khong_hoat_dong_text1", "khong_hoat_dong_text2"]
+    USE_EXCEPTION_TRAIN: bool = True
 
     def __init__(self, config: BotConfig, state_machine: Optional["StateMachine"] = None):
         super().__init__(config, state_machine)
@@ -46,20 +45,6 @@ class TrainTroopsAction(BaseAction, MapNavigationMixin):
             templates_dir=self.SHARED_TEMPLATES_DIR,
             threshold=0.75,
         )
-
-        self._timing = TimingEngine(
-            profile_path=config.humanization.profile_path
-            if config.humanization.profile_path and config.humanization.profile_path.exists()
-            else None
-        )
-        self._humanization_enabled = config.humanization.enabled
-
-    def _human_delay(self, distribution: str = "click_interval", fallback_seconds: float = 0.5) -> None:
-        if self._humanization_enabled:
-            delay_ms = self._timing.sample(distribution)
-            time.sleep(max(0.05, delay_ms / 1000.0))
-        else:
-            time.sleep(fallback_seconds)
 
     def _open_tongquan_and_get_idle_bboxes(
         self, image: np.ndarray
@@ -78,13 +63,13 @@ class TrainTroopsAction(BaseAction, MapNavigationMixin):
             )
             if tab_matches:
                 tab_btn = max(tab_matches, key=lambda m: m.confidence)
-                tx, ty = self.random_point_in_bbox(tab_btn.bbox)
+                tx, ty = self.random_point_in_bbox(tab_btn.bbox, jitter_sigma=1.0, edge_margin=2)
                 logger.info(
                     f"[Train] Opening Tong Quan tab at ({tx}, {ty}) "
                     f"conf={tab_btn.confidence:.2f}"
                 )
                 self.state_machine.pc_input.tap(tx, ty)
-                time.sleep(random.uniform(1.5, 2.5))
+                self.human_delay("menu_wait", fallback_seconds=2.0)
                 self.state_machine.pc_input.move_to_safe_zone()
                 image = self.state_machine.screen_capture.capture()
                 if image is None:
@@ -115,9 +100,11 @@ class TrainTroopsAction(BaseAction, MapNavigationMixin):
             logger.debug("[Train] khong_hoat_dong_text not found")
             return []
 
-        exception_matches = self._matcher.match(
-            image, template_name="exception_train", threshold=0.75, max_matches=10
-        )
+        exception_matches = []
+        if self.USE_EXCEPTION_TRAIN:
+            exception_matches = self._matcher.match(
+                image, template_name="exception_train", threshold=0.75, max_matches=10
+            )
 
         valid_bboxes: List[Tuple[int, int, int, int]] = []
         for tm in text_matches:
@@ -139,7 +126,7 @@ class TrainTroopsAction(BaseAction, MapNavigationMixin):
                 )
                 valid_bboxes.append(tm.bbox)
 
-        if not valid_bboxes:
+        if not valid_bboxes and self.USE_EXCEPTION_TRAIN:
             logger.debug("[Train] All khong_hoat_dong_text matches are inside exception_train")
         return valid_bboxes
 
@@ -148,6 +135,7 @@ class TrainTroopsAction(BaseAction, MapNavigationMixin):
             return False
 
         self.state_machine.pc_input.move_to_safe_zone()
+        self.pre_action_delay()
         image = self.state_machine.screen_capture.capture()
         if image is None:
             return False
@@ -159,7 +147,7 @@ class TrainTroopsAction(BaseAction, MapNavigationMixin):
         if city_state == "unknown":
             logger.warning("[Train] Unknown city/world state — pressing ESC to dismiss popup")
             self.state_machine.pc_input.key_back()
-            time.sleep(random.uniform(1.0, 2.0))
+            self.human_delay("post_error_wait", fallback_seconds=1.5)
             return False
 
         # Check completed troops first (always collect before training)
@@ -196,6 +184,7 @@ class TrainTroopsAction(BaseAction, MapNavigationMixin):
 
         # 0. Ensure we are in city view
         self.state_machine.pc_input.move_to_safe_zone()
+        self.pre_action_delay()
         image = self.state_machine.screen_capture.capture()
         if image is None:
             self.on_failure("Screenshot failed")
@@ -210,8 +199,8 @@ class TrainTroopsAction(BaseAction, MapNavigationMixin):
             self.state_machine.pc_input.move_to_safe_zone()
             image = self.state_machine.screen_capture.capture()
         elif city_state == "unknown":
-            logger.warning("[Train] Unknown city/world state — retrying in 1s")
-            time.sleep(1.0)
+            logger.warning("[Train] Unknown city/world state — retrying after delay")
+            self.human_delay("decision_time", fallback_seconds=1.0)
             self.state_machine.pc_input.move_to_safe_zone()
             image = self.state_machine.screen_capture.capture()
             if image is not None:
@@ -219,7 +208,7 @@ class TrainTroopsAction(BaseAction, MapNavigationMixin):
             if city_state == "unknown":
                 logger.warning("[Train] Still unknown — pressing ESC to dismiss popup")
                 self.state_machine.pc_input.key_back()
-                time.sleep(random.uniform(1.0, 2.0))
+                self.human_delay("post_error_wait", fallback_seconds=1.5)
                 self.on_failure("Could not determine city/world state")
                 return False
             elif city_state == "in_world":
@@ -238,10 +227,10 @@ class TrainTroopsAction(BaseAction, MapNavigationMixin):
             completed_matches = self._matcher.match(image, template_name=completed_name, threshold=0.75)
             if completed_matches:
                 completed_btn = max(completed_matches, key=lambda m: m.confidence)
-                cx, cy = self.random_point_in_bbox(completed_btn.bbox)
+                cx, cy = self.random_point_in_bbox(completed_btn.bbox, jitter_sigma=1.0, edge_margin=2)
                 logger.info(f"[Train] Step 1/5: Collecting {completed_name} at ({cx}, {cy})")
                 self.state_machine.pc_input.tap(cx, cy)
-                time.sleep(random.uniform(1.0, 3.0))
+                self.human_delay("click_interval", fallback_seconds=1.5)
                 return True
 
         # 2. Verify idle buildings via Tong Quan tab and click directly on the text
@@ -260,10 +249,11 @@ class TrainTroopsAction(BaseAction, MapNavigationMixin):
             f"(idle count={len(idle_bboxes)})"
         )
         self.state_machine.pc_input.tap(cx, cy)
-        time.sleep(random.uniform(2.0, 3.0))
+        self.human_delay("menu_wait", fallback_seconds=2.5)
 
         # 4. In popup, find one of the 4 troop type icons
         self.state_machine.pc_input.move_to_safe_zone()
+        self.pre_action_delay()
         popup_image = self.state_machine.screen_capture.capture()
         if popup_image is None:
             return False
@@ -283,19 +273,20 @@ class TrainTroopsAction(BaseAction, MapNavigationMixin):
             close_matches = self._matcher.match(popup_image, template_name="close_popup")
             if close_matches:
                 close_btn = max(close_matches, key=lambda m: m.confidence)
-                clx, cly = self._random_point_in_bbox(close_btn.bbox)
+                clx, cly = self.random_point_in_bbox(close_btn.bbox, jitter_sigma=1.0, edge_margin=2)
                 logger.info(f"[Train] Closing popup at ({clx}, {cly})")
                 self.state_machine.pc_input.tap(clx, cly)
-                time.sleep(random.uniform(1.0, 3.0))
+                self.human_delay("click_interval", fallback_seconds=1.5)
             return False
 
-        tx, ty = self.random_point_in_bbox(train_match.bbox)
+        tx, ty = self.random_point_in_bbox(train_match.bbox, jitter_sigma=1.0, edge_margin=2)
         logger.info(f"[Train] Step 3/5: Tapping '{train_name}' at ({tx}, {ty})")
         self.state_machine.pc_input.tap(tx, ty)
-        time.sleep(random.uniform(1.0, 3.0))
+        self.human_delay("click_interval", fallback_seconds=1.5)
 
         # 5. Find and tap the corresponding *_selected.png
         self.state_machine.pc_input.move_to_safe_zone()
+        self.pre_action_delay()
         selected_image = self.state_machine.screen_capture.capture()
         if selected_image is None:
             return False
@@ -304,15 +295,16 @@ class TrainTroopsAction(BaseAction, MapNavigationMixin):
         selected_matches = self._matcher.match(selected_image, template_name=selected_name, threshold=0.75)
         if selected_matches:
             selected_btn = max(selected_matches, key=lambda m: m.confidence)
-            sx, sy = self.random_point_in_bbox(selected_btn.bbox)
+            sx, sy = self.random_point_in_bbox(selected_btn.bbox, jitter_sigma=1.0, edge_margin=2)
             logger.info(f"[Train] Step 4/5: Tapping '{selected_name}' at ({sx}, {sy})")
             self.state_machine.pc_input.tap(sx, sy)
-            time.sleep(random.uniform(1.0, 3.0))
+            self.human_delay("click_interval", fallback_seconds=1.5)
         else:
             logger.info(f"[Train] '{selected_name}' not found — proceeding without selection")
 
         # 6. Find and tap train_confirm
         self.state_machine.pc_input.move_to_safe_zone()
+        self.pre_action_delay()
         confirm_image = self.state_machine.screen_capture.capture()
         if confirm_image is None:
             return False
@@ -320,10 +312,10 @@ class TrainTroopsAction(BaseAction, MapNavigationMixin):
         confirm_matches = self._matcher.match(confirm_image, template_name="train_confirm", threshold=0.75)
         if confirm_matches:
             confirm_btn = max(confirm_matches, key=lambda m: m.confidence)
-            cfx, cfy = self.random_point_in_bbox(confirm_btn.bbox)
+            cfx, cfy = self.random_point_in_bbox(confirm_btn.bbox, jitter_sigma=1.0, edge_margin=2)
             logger.info(f"[Train] Step 5/5: Tapping train_confirm at ({cfx}, {cfy})")
             self.state_machine.pc_input.tap(cfx, cfy)
-            time.sleep(random.uniform(1.0, 3.0))
+            self.human_delay("click_interval", fallback_seconds=1.5)
             return True
 
         # No train_confirm — close popup
@@ -331,8 +323,8 @@ class TrainTroopsAction(BaseAction, MapNavigationMixin):
         close_matches = self._matcher.match(confirm_image, template_name="close_popup")
         if close_matches:
             close_btn = max(close_matches, key=lambda m: m.confidence)
-            clx, cly = self.random_point_in_bbox(close_btn.bbox)
+            clx, cly = self.random_point_in_bbox(close_btn.bbox, jitter_sigma=1.0, edge_margin=2)
             logger.info(f"[Train] Closing popup at ({clx}, {cly})")
             self.state_machine.pc_input.tap(clx, cly)
-            time.sleep(random.uniform(1.0, 3.0))
+            self.human_delay("click_interval", fallback_seconds=1.5)
         return False

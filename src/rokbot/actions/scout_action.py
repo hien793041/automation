@@ -1,16 +1,13 @@
 """Scouting action using template matching."""
 
 import random
-import time
 from pathlib import Path
 from typing import TYPE_CHECKING, Optional, Tuple
 
-import numpy as np
 from loguru import logger
 
 from rokbot.actions.base_action import BaseAction
 from rokbot.core.config import BotConfig
-from rokbot.humanization.timing_engine import TimingEngine
 from rokbot.utils.map_navigation import MapNavigationMixin
 from rokbot.vision.template_matcher import TemplateMatcher
 
@@ -25,7 +22,6 @@ class ScoutAction(BaseAction, MapNavigationMixin):
     SHARED_TEMPLATES_DIR = Path("data/templates")
     SCOUT_TEMPLATES = ["tham_do", "scout_icon"]  # text bubble, icon
     BUILDING_OFFSET_Y_RATIO = 1.2  # tap below the bubble/icon, roughly building center
-    POST_TAP_WAIT = 1.5
 
     # Bottom-right corner ROI where city/map toggle icon lives
     CITY_ICON_ROI_RATIO: Tuple[float, float, float, float] = (0.75, 0.75, 1.0, 1.0)
@@ -40,20 +36,6 @@ class ScoutAction(BaseAction, MapNavigationMixin):
             templates_dir=self.SHARED_TEMPLATES_DIR,
             threshold=0.80,
         )
-        self._timing = TimingEngine(
-            profile_path=config.humanization.profile_path
-            if config.humanization.profile_path and config.humanization.profile_path.exists()
-            else None
-        )
-        self._humanization_enabled = config.humanization.enabled
-
-    def _human_delay(self, distribution: str = "click_interval", fallback_seconds: float = 0.5) -> None:
-        """Sleep using humanized timing if enabled, otherwise use fallback."""
-        if self._humanization_enabled:
-            delay_ms = self._timing.sample(distribution)
-            time.sleep(max(0.05, delay_ms / 1000.0))
-        else:
-            time.sleep(fallback_seconds)
 
     def can_execute(self) -> bool:
         """Return True if scout is actionable (in city or can enter city)."""
@@ -61,6 +43,7 @@ class ScoutAction(BaseAction, MapNavigationMixin):
             return False
 
         self.state_machine.pc_input.move_to_safe_zone()
+        self.pre_action_delay()
         image = self.state_machine.screen_capture.capture()
         if image is None:
             return False
@@ -69,7 +52,7 @@ class ScoutAction(BaseAction, MapNavigationMixin):
         if city_state == "unknown":
             logger.warning("[Scout] Unknown city/world state — pressing ESC to dismiss popup")
             self.state_machine.pc_input.key_back()
-            time.sleep(random.uniform(1.0, 2.0))
+            self.human_delay("post_error_wait", fallback_seconds=1.5)
             return False
 
         if city_state == "in_world":
@@ -97,6 +80,7 @@ class ScoutAction(BaseAction, MapNavigationMixin):
 
         # 0. Make sure we are in city view
         self.state_machine.pc_input.move_to_safe_zone()
+        self.pre_action_delay()
         image = self.state_machine.screen_capture.capture()
         if image is None:
             self.on_failure("Screenshot failed")
@@ -112,8 +96,8 @@ class ScoutAction(BaseAction, MapNavigationMixin):
             self.state_machine.pc_input.move_to_safe_zone()
             image = self.state_machine.screen_capture.capture()
         elif city_state == "unknown":
-            logger.warning("[Scout] Unknown city/world state — retrying in 1s")
-            time.sleep(1.0)
+            logger.warning("[Scout] Unknown city/world state — retrying after delay")
+            self.human_delay("decision_time", fallback_seconds=1.0)
             self.state_machine.pc_input.move_to_safe_zone()
             image = self.state_machine.screen_capture.capture()
             if image is not None:
@@ -121,7 +105,7 @@ class ScoutAction(BaseAction, MapNavigationMixin):
             if city_state == "unknown":
                 logger.warning("[Scout] Still unknown — pressing ESC to dismiss popup")
                 self.state_machine.pc_input.key_back()
-                time.sleep(random.uniform(1.0, 2.0))
+                self.human_delay("post_error_wait", fallback_seconds=1.5)
                 self.on_failure("Could not determine city/world state")
                 return False
             elif city_state == "in_world":
@@ -157,17 +141,15 @@ class ScoutAction(BaseAction, MapNavigationMixin):
 
         logger.info(f"[Scout] Step 1/5: Tapping Scout Camp at ({building_x}, {building_y})")
         self.state_machine.pc_input.tap(building_x, building_y)
+        self.human_delay("menu_wait", fallback_seconds=1.0)
 
-        # 3. Wait for the scout menu/popup to open
-        time.sleep(random.uniform(0.8, 1.0))
-
-        # 4. Tap buttons in the popup sequentially, re-capturing after each tap
+        # 3. Tap buttons in the popup sequentially, re-capturing after each tap
         #    because later buttons only appear after earlier ones are pressed.
         # Sequence: scout_button -> scout_send (x2) -> scout_confirm
         popup_sequence = ["scout_button", "scout_send", "scout_send", "scout_confirm"]
         scout_send_count = 0
         for idx, tpl in enumerate(popup_sequence, start=2):
-            time.sleep(random.uniform(0.3, 0.8))  # quick wait before finding button
+            self.human_delay("reaction_time", fallback_seconds=0.3)
             self.state_machine.pc_input.move_to_safe_zone()
             popup_image = self.state_machine.screen_capture.capture()
             if popup_image is None:
@@ -175,7 +157,7 @@ class ScoutAction(BaseAction, MapNavigationMixin):
             btn_matches = self._matcher.match(popup_image, template_name=tpl)
             if btn_matches:
                 btn = max(btn_matches, key=lambda m: m.confidence)
-                bx, by = self.random_point_in_bbox(btn.bbox)
+                bx, by = self.random_point_in_bbox(btn.bbox, jitter_sigma=1.0, edge_margin=2)
                 logger.info(f"[Scout] Step {idx}/5: Tapping '{tpl}' at ({bx}, {by})")
                 self.state_machine.pc_input.tap(bx, by)
 
@@ -183,27 +165,28 @@ class ScoutAction(BaseAction, MapNavigationMixin):
                 if tpl == "scout_send":
                     scout_send_count += 1
                     if scout_send_count == 1:
-                        time.sleep(random.uniform(1.8, 2.0))
+                        self.human_delay("menu_wait", fallback_seconds=1.9)
                     else:
-                        time.sleep(random.uniform(0.3, 0.8))
+                        self.human_delay("click_interval", fallback_seconds=0.5)
                 else:
-                    time.sleep(random.uniform(0.3, 0.8))
+                    self.human_delay("click_interval", fallback_seconds=0.5)
             else:
                 # Button not found — try to close popup and restart flow
                 close_matches = self._matcher.match(popup_image, template_name="close_popup")
                 if close_matches:
                     close_btn = max(close_matches, key=lambda m: m.confidence)
-                    cx, cy = self.random_point_in_bbox(close_btn.bbox)
-                    logger.info(f"[Scout] Button '{tpl}' not found — closing popup at ({cx}, {cy})")
-                    self.state_machine.pc_input.tap(cx, cy)
-                    time.sleep(random.uniform(0.5, 1.0))
+                    close_x, close_y = self.random_point_in_bbox(close_btn.bbox, jitter_sigma=1.0, edge_margin=2)
+                    logger.info(f"[Scout] Button '{tpl}' not found — closing popup at ({close_x}, {close_y})")
+                    self.state_machine.pc_input.tap(close_x, close_y)
+                    self.human_delay("click_interval", fallback_seconds=0.8)
                 return False
 
         # Ensure we end up in city view after scouting (UI may switch to world map)
         self.state_machine.pc_input.move_to_safe_zone()
+        self.human_delay("transition_wait", fallback_seconds=1.0)
         final_image = self.state_machine.screen_capture.capture()
         if final_image is not None:
             self._ensure_in_city(final_image)
 
-        time.sleep(random.uniform(1.0, 3.0))  # post-execution delay before next cycle
+        self.human_delay("click_interval", fallback_seconds=1.5)
         return True

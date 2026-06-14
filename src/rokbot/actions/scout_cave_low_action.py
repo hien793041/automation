@@ -1,7 +1,6 @@
 """Scout Cave action — sends scouts to cave coordinates on the world map."""
 
 import random
-import time
 from pathlib import Path
 from typing import TYPE_CHECKING, List, Optional, Tuple
 
@@ -47,7 +46,7 @@ class ScoutCaveLowAction(BaseAction, MapNavigationMixin):
         self._load_caves()
 
     def _load_caves(self) -> None:
-        """Load cave coordinates from CSV. Prioritize 'High' type, skip Done caves."""
+        """Load cave coordinates from CSV. Prioritize non-'High' type, skip Done caves."""
         if not self.CAVE_CSV.exists():
             logger.warning(f"[ScoutCaveLow] Cave CSV not found: {self.CAVE_CSV}")
             return
@@ -99,7 +98,7 @@ class ScoutCaveLowAction(BaseAction, MapNavigationMixin):
                     return (*best.center, best.bbox)
             if attempt < retries - 1:
                 logger.debug(f"[ScoutCaveLow] Cave not found, retry {attempt + 1}/{retries}")
-                time.sleep(0.5)
+                self.human_delay("reaction_time", fallback_seconds=0.5)
                 self.state_machine.pc_input.move_to_safe_zone()
                 image = self.state_machine.screen_capture.capture()
         logger.info("[ScoutCaveLow] No cave icon found after retries")
@@ -110,10 +109,10 @@ class ScoutCaveLowAction(BaseAction, MapNavigationMixin):
         tongquan_matches = self._matcher.match(image, template_name="tongquan", threshold=0.75)
         if tongquan_matches:
             btn = max(tongquan_matches, key=lambda m: m.confidence)
-            bx, by = self.random_point_in_bbox(btn.bbox)
+            bx, by = self.random_point_in_bbox(btn.bbox, jitter_sigma=1.0, edge_margin=2)
             logger.info(f"[ScoutCaveLow] Opening tongquan tab at ({bx}, {by})")
             self.state_machine.pc_input.tap(bx, by)
-            time.sleep(random.uniform(0.8, 1.2))
+            self.human_delay("menu_wait", fallback_seconds=1.0)
             return True
 
         tongquan_opened = self._matcher.match(image, template_name="tongquan_opened", threshold=0.75)
@@ -128,6 +127,7 @@ class ScoutCaveLowAction(BaseAction, MapNavigationMixin):
             return False
 
         self.state_machine.pc_input.move_to_safe_zone()
+        self.pre_action_delay()
         image = self.state_machine.screen_capture.capture()
         if image is None:
             return False
@@ -168,6 +168,7 @@ class ScoutCaveLowAction(BaseAction, MapNavigationMixin):
 
         # 0. Ensure city view
         self.state_machine.pc_input.move_to_safe_zone()
+        self.pre_action_delay()
         image = self.state_machine.screen_capture.capture()
         if image is None:
             self.on_failure("Screenshot failed")
@@ -182,15 +183,15 @@ class ScoutCaveLowAction(BaseAction, MapNavigationMixin):
             self.state_machine.pc_input.move_to_safe_zone()
             image = self.state_machine.screen_capture.capture()
         elif city_state == "unknown":
-            logger.warning("[ScoutCaveLow] Unknown state — retrying in 1s")
-            time.sleep(1.0)
+            logger.warning("[ScoutCaveLow] Unknown state — retrying after delay")
+            self.human_delay("decision_time", fallback_seconds=1.0)
             self.state_machine.pc_input.move_to_safe_zone()
             image = self.state_machine.screen_capture.capture()
             if image is not None:
                 city_state = self._detect_city_state(image)
             if city_state == "unknown":
                 self.state_machine.pc_input.key_back()
-                time.sleep(random.uniform(1.0, 2.0))
+                self.human_delay("post_error_wait", fallback_seconds=1.5)
                 self.on_failure("Could not determine city/world state")
                 return False
             elif city_state == "in_world":
@@ -222,6 +223,7 @@ class ScoutCaveLowAction(BaseAction, MapNavigationMixin):
 
         # 2. Click scout building in city
         self.state_machine.pc_input.move_to_safe_zone()
+        self.pre_action_delay()
         image = self.state_machine.screen_capture.capture()
         if image is None:
             return False
@@ -230,13 +232,14 @@ class ScoutCaveLowAction(BaseAction, MapNavigationMixin):
             logger.info("[ScoutCaveLow] scout_building not found")
             return False
         building_btn = max(building_matches, key=lambda m: m.confidence)
-        bbx, bby = self.random_point_in_bbox(building_btn.bbox)
+        bbx, bby = self.random_point_in_bbox(building_btn.bbox, jitter_sigma=1.0, edge_margin=2)
         logger.info(f"[ScoutCaveLow] Step 2/6: Tapping scout_building at ({bbx}, {bby})")
         self.state_machine.pc_input.tap(bbx, bby)
-        time.sleep(random.uniform(1.0, 2.0))
+        self.human_delay("menu_wait", fallback_seconds=1.5)
 
         # 3. Click scout_button in popup
         self.state_machine.pc_input.move_to_safe_zone()
+        self.pre_action_delay()
         image = self.state_machine.screen_capture.capture()
         if image is None:
             return False
@@ -245,13 +248,14 @@ class ScoutCaveLowAction(BaseAction, MapNavigationMixin):
             logger.info("[ScoutCaveLow] scout_button not found")
             return False
         scout_btn = max(scout_btn_matches, key=lambda m: m.confidence)
-        sbx, sby = self.random_point_in_bbox(scout_btn.bbox)
+        sbx, sby = self.random_point_in_bbox(scout_btn.bbox, jitter_sigma=1.0, edge_margin=2)
         logger.info(f"[ScoutCaveLow] Step 3/6: Tapping scout_button at ({sbx}, {sby})")
         self.state_machine.pc_input.tap(sbx, sby)
-        time.sleep(random.uniform(1.0, 2.0))
+        self.human_delay("menu_wait", fallback_seconds=1.5)
 
         # 4. Click cave_tab
         self.state_machine.pc_input.move_to_safe_zone()
+        self.pre_action_delay()
         image = self.state_machine.screen_capture.capture()
         if image is None:
             return False
@@ -260,13 +264,14 @@ class ScoutCaveLowAction(BaseAction, MapNavigationMixin):
             logger.info("[ScoutCaveLow] cave_tab not found")
             return False
         cave_tab = max(cave_tab_matches, key=lambda m: m.confidence)
-        ctx, cty = self.random_point_in_bbox(cave_tab.bbox)
+        ctx, cty = self.random_point_in_bbox(cave_tab.bbox, jitter_sigma=1.0, edge_margin=2)
         logger.info(f"[ScoutCaveLow] Step 4/6: Tapping cave_tab at ({ctx}, {cty})")
         self.state_machine.pc_input.tap(ctx, cty)
-        time.sleep(random.uniform(1.0, 2.0))
+        self.human_delay("menu_wait", fallback_seconds=1.5)
 
         # 5. Find go_btn and click at its bottom
         self.state_machine.pc_input.move_to_safe_zone()
+        self.pre_action_delay()
         image = self.state_machine.screen_capture.capture()
         if image is None:
             return False
@@ -280,10 +285,11 @@ class ScoutCaveLowAction(BaseAction, MapNavigationMixin):
         click_y = gy2
         logger.info(f"[ScoutCaveLow] Step 5/6: Tapping go_btn bottom at ({click_x}, {click_y})")
         self.state_machine.pc_input.tap(click_x, click_y)
-        time.sleep(3.0)
+        self.human_delay("transition_wait", fallback_seconds=3.0, min_seconds=2.0)
 
         # 6. Tap scout_btn (in scoutcave folder)
         self.state_machine.pc_input.move_to_safe_zone()
+        self.pre_action_delay()
         image = self.state_machine.screen_capture.capture()
         if image is None:
             return False
@@ -292,13 +298,14 @@ class ScoutCaveLowAction(BaseAction, MapNavigationMixin):
             logger.info("[ScoutCaveLow] scout_btn not found")
             return False
         scout_btn = max(scout_matches, key=lambda m: m.confidence)
-        sx, sy = self.random_point_in_bbox(scout_btn.bbox)
+        sx, sy = self.random_point_in_bbox(scout_btn.bbox, jitter_sigma=1.0, edge_margin=2)
         logger.info(f"[ScoutCaveLow] Step 6/6: Tapping 'Scout' at ({sx}, {sy})")
         self.state_machine.pc_input.tap(sx, sy)
-        time.sleep(random.uniform(1.0, 2.0))
+        self.human_delay("click_interval", fallback_seconds=1.5)
 
         # 7. Tap Send button
         self.state_machine.pc_input.move_to_safe_zone()
+        self.pre_action_delay()
         image = self.state_machine.screen_capture.capture()
         if image is None:
             return False
@@ -307,8 +314,8 @@ class ScoutCaveLowAction(BaseAction, MapNavigationMixin):
             logger.info("[ScoutCaveLow] send_btn not found")
             return False
         send_btn = max(send_matches, key=lambda m: m.confidence)
-        send_x, send_y = self.random_point_in_bbox(send_btn.bbox)
+        send_x, send_y = self.random_point_in_bbox(send_btn.bbox, jitter_sigma=1.0, edge_margin=2)
         logger.info(f"[ScoutCaveLow] Step 7/7: Tapping 'Send' at ({send_x}, {send_y})")
         self.state_machine.pc_input.tap(send_x, send_y)
-        time.sleep(random.uniform(1.0, 2.0))
+        self.human_delay("click_interval", fallback_seconds=1.5)
         return True

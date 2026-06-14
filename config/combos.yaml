@@ -9,21 +9,22 @@ combos:
     - alliance_help
     - gather
     - train_troops
-    - rally_fort
+    # - rally_fort
+    - barbarian_attack
   my_combo2:
     - reconnect
     - alliance_help
     - gather
-    # - train_troops
+    - train_troops
+    # - rally_fort
   my_combo3:
     - reconnect
-    # - villager_help
-    # - scout
     - alliance_help
-    - barbarian_attack
+    - gather_gem
     - train_troops
-    - scout_cave_low
+    # - rally_fort
   my_combo4:
     - gather_gem
   my_combo5:
-    - train_troops
+    - barbarian_attack
+    - alliance_help

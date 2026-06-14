@@ -1,7 +1,6 @@
 """Gather action for collecting resources on the world map."""
 
 import random
-import time
 from pathlib import Path
 from typing import TYPE_CHECKING, Optional, Tuple
 
@@ -26,7 +25,7 @@ class GatherAction(BaseAction, MapNavigationMixin):
 
     CITY_ICON_ROI_RATIO: Tuple[float, float, float, float] = (0.75, 0.75, 1.0, 1.0)
     # RESOURCE_ICONS = ["corn_icon", "wood_icon", "stone_icon", "gold_icon"]
-    RESOURCE_ICONS = ["wood_icon", "stone_icon", "corn_icon"]
+    RESOURCE_ICONS = ["corn_icon", "wood_icon", "stone_icon"]
 
     # Stop gathering when this many troops are already active
     MAX_ACTIVE_TROOPS = 3
@@ -67,6 +66,7 @@ class GatherAction(BaseAction, MapNavigationMixin):
             return False
 
         self.state_machine.pc_input.move_to_safe_zone()
+        self.pre_action_delay()
         image = self.state_machine.screen_capture.capture()
         if image is None:
             return False
@@ -108,6 +108,7 @@ class GatherAction(BaseAction, MapNavigationMixin):
 
         # Capture initial screen
         self.state_machine.pc_input.move_to_safe_zone()
+        self.pre_action_delay()
         image = self.state_machine.screen_capture.capture()
         if image is None:
             self.on_failure("Screenshot failed")
@@ -123,8 +124,8 @@ class GatherAction(BaseAction, MapNavigationMixin):
             self.state_machine.pc_input.move_to_safe_zone()
             image = self.state_machine.screen_capture.capture()
         elif city_state == "unknown":
-            logger.warning("[Gather] Unknown city/world state — retrying in 1s")
-            time.sleep(1.0)
+            logger.warning("[Gather] Unknown city/world state — retrying after delay")
+            self.human_delay("decision_time", fallback_seconds=1.0)
             self.state_machine.pc_input.move_to_safe_zone()
             image = self.state_machine.screen_capture.capture()
             if image is not None:
@@ -132,7 +133,7 @@ class GatherAction(BaseAction, MapNavigationMixin):
             if city_state == "unknown":
                 logger.warning("[Gather] Still unknown — pressing ESC")
                 self.state_machine.pc_input.key_back()
-                time.sleep(random.uniform(1.0, 2.0))
+                self.human_delay("post_error_wait", fallback_seconds=1.5)
                 self.on_failure("Could not determine city/world state")
                 return False
             elif city_state == "in_city":
@@ -157,13 +158,14 @@ class GatherAction(BaseAction, MapNavigationMixin):
             logger.info("[Gather] world_find_btn not found")
             return False
         find_btn = max(find_matches, key=lambda m: m.confidence)
-        fx, fy = self.random_point_in_bbox(find_btn.bbox)
+        fx, fy = self.random_point_in_bbox(find_btn.bbox, jitter_sigma=1.0, edge_margin=2)
         logger.info(f"[Gather] Step 1/6: Tapping 'Find' at ({fx}, {fy})")
         self.state_machine.pc_input.tap(fx, fy)
-        time.sleep(random.uniform(1.0, 2.0))
+        self.human_delay("menu_wait", fallback_seconds=1.5)
 
         # 2. Select resource type (corn / stone / wood)
         self.state_machine.pc_input.move_to_safe_zone()
+        self.pre_action_delay()
         resource_image = self.state_machine.screen_capture.capture()
         if resource_image is None:
             return False
@@ -190,13 +192,14 @@ class GatherAction(BaseAction, MapNavigationMixin):
             logger.info("[Gather] No resource icon found")
             return False
 
-        rx, ry = self.random_point_in_bbox(resource_match.bbox)
+        rx, ry = self.random_point_in_bbox(resource_match.bbox, jitter_sigma=1.0, edge_margin=2)
         logger.info(f"[Gather] Tapping '{resource_name}' at ({rx}, {ry})")
         self.state_machine.pc_input.tap(rx, ry)
-        time.sleep(random.uniform(1.0, 2.0))
+        self.human_delay("menu_wait", fallback_seconds=1.5)
 
         # 3. Tap "Find" in menu
         self.state_machine.pc_input.move_to_safe_zone()
+        self.pre_action_delay()
         menu_image = self.state_machine.screen_capture.capture()
         if menu_image is None:
             return False
@@ -205,13 +208,14 @@ class GatherAction(BaseAction, MapNavigationMixin):
             logger.info("[Gather] menu_find_btn not found")
             return False
         menu_find_btn = max(menu_find_matches, key=lambda m: m.confidence)
-        mfx, mfy = self.random_point_in_bbox(menu_find_btn.bbox)
+        mfx, mfy = self.random_point_in_bbox(menu_find_btn.bbox, jitter_sigma=1.0, edge_margin=2)
         logger.info(f"[Gather] Step 3/6: Tapping 'Find' in menu at ({mfx}, {mfy})")
         self.state_machine.pc_input.tap(mfx, mfy)
-        time.sleep(random.uniform(1.8, 2.2))
+        self.human_delay("menu_wait", fallback_seconds=2.0)
 
         # 4. Tap Gather button
         self.state_machine.pc_input.move_to_safe_zone()
+        self.pre_action_delay()
         gather_image = self.state_machine.screen_capture.capture()
         if gather_image is None:
             return False
@@ -220,13 +224,14 @@ class GatherAction(BaseAction, MapNavigationMixin):
             logger.info("[Gather] gather_btn not found")
             return False
         gather_btn = max(gather_matches, key=lambda m: m.confidence)
-        gx, gy = self.random_point_in_bbox(gather_btn.bbox)
+        gx, gy = self.random_point_in_bbox(gather_btn.bbox, jitter_sigma=1.0, edge_margin=2)
         logger.info(f"[Gather] Step 4/6: Tapping 'Gather' at ({gx}, {gy})")
         self.state_machine.pc_input.tap(gx, gy)
-        time.sleep(random.uniform(1.0, 2.0))
+        self.human_delay("click_interval", fallback_seconds=1.5)
 
         # 5. Tap New Troop
         self.state_machine.pc_input.move_to_safe_zone()
+        self.pre_action_delay()
         new_troop_image = self.state_machine.screen_capture.capture()
         if new_troop_image is None:
             return False
@@ -235,13 +240,14 @@ class GatherAction(BaseAction, MapNavigationMixin):
             logger.info("[Gather] new_troop not found")
             return False
         new_btn = max(new_matches, key=lambda m: m.confidence)
-        nx, ny = self.random_point_in_bbox(new_btn.bbox)
+        nx, ny = self.random_point_in_bbox(new_btn.bbox, jitter_sigma=1.0, edge_margin=2)
         logger.info(f"[Gather] Step 5/6: Tapping 'New Troop' at ({nx}, {ny})")
         self.state_machine.pc_input.tap(nx, ny)
-        time.sleep(random.uniform(1.0, 2.0))
+        self.human_delay("click_interval", fallback_seconds=1.5)
 
         # 6. Tap Send Troop
         self.state_machine.pc_input.move_to_safe_zone()
+        self.pre_action_delay()
         send_image = self.state_machine.screen_capture.capture()
         if send_image is None:
             return False
@@ -250,8 +256,8 @@ class GatherAction(BaseAction, MapNavigationMixin):
             logger.info("[Gather] send_troop not found")
             return False
         send_btn = max(send_matches, key=lambda m: m.confidence)
-        sx, sy = self.random_point_in_bbox(send_btn.bbox)
+        sx, sy = self.random_point_in_bbox(send_btn.bbox, jitter_sigma=1.0, edge_margin=2)
         logger.info(f"[Gather] Step 6/6: Tapping 'Send Troop' at ({sx}, {sy})")
         self.state_machine.pc_input.tap(sx, sy)
-        time.sleep(random.uniform(1.0, 2.0))
+        self.human_delay("click_interval", fallback_seconds=1.5)
         return True

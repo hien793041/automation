@@ -15,6 +15,19 @@ timing:
   break_duration:
     type: exponential
     lambda: 0.004
+  # Delays for common bot workflows
+  transition_wait:
+    type: gaussian
+    mu: 1800.0
+    sigma: 400.0
+  menu_wait:
+    type: gaussian
+    mu: 1200.0
+    sigma: 300.0
+  post_error_wait:
+    type: gaussian
+    mu: 2500.0
+    sigma: 600.0
 
 movement:
   fitts_a: 100.0

@@ -1,7 +1,6 @@
 """Shared map navigation helpers for actions."""
 
 import random
-import time
 from typing import Tuple
 
 import numpy as np
@@ -15,12 +14,33 @@ class MapNavigationMixin:
         - CITY_ICON_ROI_RATIO: Tuple[float, float, float, float]
         - _city_matcher: TemplateMatcher instance
         - state_machine: with pc_input attribute
+
+    The subclass should also inherit from BaseAction (or otherwise provide
+    ``human_delay`` and ``random_point_in_bbox``) so the navigation pauses are
+    humanized.
     """
 
-    @staticmethod
-    def random_point_in_bbox(bbox: Tuple[int, int, int, int]) -> Tuple[int, int]:
-        """Return a random point inside a bounding box."""
+    def random_point_in_bbox(
+        self,
+        bbox: Tuple[int, int, int, int],
+        jitter_sigma: float = 0.0,
+        edge_margin: int = 0,
+    ) -> Tuple[int, int]:
+        """Return a random point inside a bounding box with optional jitter.
+
+        This mixin version delegates to the BaseAction implementation when
+        available; otherwise it falls back to a plain uniform sample.
+        """
+        base_impl = getattr(super(), "random_point_in_bbox", None)
+        if callable(base_impl):
+            return base_impl(bbox, jitter_sigma=jitter_sigma, edge_margin=edge_margin)
+
         x1, y1, x2, y2 = bbox
+        if edge_margin:
+            x1 += edge_margin
+            y1 += edge_margin
+            x2 = max(x1 + 1, x2 - edge_margin)
+            y2 = max(y1 + 1, y2 - edge_margin)
         px = random.randint(x1, max(x1, x2 - 1))
         py = random.randint(y1, max(y1, y2 - 1))
         return (px, py)
@@ -85,11 +105,12 @@ class MapNavigationMixin:
         if enter_matches:
             best = max(enter_matches, key=lambda m: m.confidence)
             bx1, by1, bx2, by2 = best.bbox
-            cx = roi_x1 + random.randint(bx1, max(bx1, bx2 - 1))
-            cy = roi_y1 + random.randint(by1, max(by1, by2 - 1))
+            cx, cy = self.random_point_in_bbox((bx1, by1, bx2, by2), edge_margin=2)
+            cx += roi_x1
+            cy += roi_y1
             logger.info(f"In world — entering city at ({cx}, {cy})")
             pc_input.tap(cx, cy)
-            time.sleep(random.uniform(1.0, 3.0))
+            self.human_delay("transition_wait", fallback_seconds=1.5)
             return True
 
         logger.warning("Could not determine city/world state")
@@ -119,11 +140,12 @@ class MapNavigationMixin:
         if in_city_matches:
             best = max(in_city_matches, key=lambda m: m.confidence)
             bx1, by1, bx2, by2 = best.bbox
-            cx = roi_x1 + random.randint(bx1, max(bx1, bx2 - 1))
-            cy = roi_y1 + random.randint(by1, max(by1, by2 - 1))
+            cx, cy = self.random_point_in_bbox((bx1, by1, bx2, by2), edge_margin=2)
+            cx += roi_x1
+            cy += roi_y1
             logger.info(f"In city — switching to world map at ({cx}, {cy})")
             pc_input.tap(cx, cy)
-            time.sleep(random.uniform(1.0, 3.0))
+            self.human_delay("transition_wait", fallback_seconds=1.5)
             return True
 
         logger.warning("Could not determine city/world state")

@@ -1,11 +1,8 @@
 """Dynamic combo action that runs a user-defined sequence of actions."""
 
-import random
-import time
 from pathlib import Path
 from typing import TYPE_CHECKING, List, Optional, Tuple
 
-import numpy as np
 from loguru import logger
 
 from rokbot.actions.action_factory import ActionFactory
@@ -91,6 +88,7 @@ class DynamicComboAction(BaseAction, MapNavigationMixin):
 
         if action_name in city_actions or action_name in world_actions:
             self.state_machine.pc_input.move_to_safe_zone()
+            self.pre_action_delay()
             image = self.state_machine.screen_capture.capture()
             if image is not None:
                 city_state = self._detect_city_state(image)
@@ -99,16 +97,16 @@ class DynamicComboAction(BaseAction, MapNavigationMixin):
                     if not self._ensure_in_city(image):
                         logger.warning(f"[{self.combo_name}] Failed to enter city")
                         return False
-                    time.sleep(random.uniform(1.5, 2.5))
+                    self.human_delay("transition_wait", fallback_seconds=2.0)
                 elif action_name in world_actions and city_state == "in_city":
                     logger.info(f"[{self.combo_name}] World action '{action_name}' pending but in city — switching to world")
                     if not self._ensure_in_world(image):
                         logger.warning(f"[{self.combo_name}] Failed to enter world")
                         return False
-                    time.sleep(random.uniform(1.0, 2.0))
+                    self.human_delay("transition_wait", fallback_seconds=1.5)
                 elif city_state == "unknown":
-                    logger.warning(f"[{self.combo_name}] Unknown city/world state — retrying in 1s")
-                    time.sleep(1.0)
+                    logger.warning(f"[{self.combo_name}] Unknown city/world state — retrying after delay")
+                    self.human_delay("decision_time", fallback_seconds=1.0)
                     self.state_machine.pc_input.move_to_safe_zone()
                     image = self.state_machine.screen_capture.capture()
                     if image is not None:
@@ -116,20 +114,20 @@ class DynamicComboAction(BaseAction, MapNavigationMixin):
                     if city_state == "unknown":
                         logger.warning(f"[{self.combo_name}] Still unknown — pressing ESC")
                         self.state_machine.pc_input.key_back()
-                        time.sleep(random.uniform(1.0, 2.0))
+                        self.human_delay("post_error_wait", fallback_seconds=1.5)
                         return False
                     elif action_name in city_actions and city_state == "in_world":
                         logger.info(f"[{self.combo_name}] City action '{action_name}' pending but in world after retry — entering city")
                         if not self._ensure_in_city(image):
                             logger.warning(f"[{self.combo_name}] Failed to enter city")
                             return False
-                        time.sleep(random.uniform(1.5, 2.5))
+                        self.human_delay("transition_wait", fallback_seconds=2.0)
                     elif action_name in world_actions and city_state == "in_city":
                         logger.info(f"[{self.combo_name}] World action '{action_name}' pending but in city after retry — switching to world")
                         if not self._ensure_in_world(image):
                             logger.warning(f"[{self.combo_name}] Failed to enter world")
                             return False
-                        time.sleep(random.uniform(1.0, 2.0))
+                        self.human_delay("transition_wait", fallback_seconds=1.5)
 
         logger.info(f"[{self.combo_name}] Running '{action_name}'")
         try:

@@ -108,7 +108,11 @@ class PCInput:
 
     def key_back(self) -> None:
         """Press Escape (Android BACK equivalent on PC)."""
+        if self._timing:
+            self._human_delay("reaction_time")
         pyautogui.press("esc")
+        if self._timing:
+            self._human_delay("click_interval")
         logger.debug("Pressed ESC (back)")
 
     def key_home(self) -> None:
@@ -121,12 +125,25 @@ class PCInput:
         if rect is None:
             return
         left, top, _, _ = rect
+        if self._timing:
+            self._human_delay("reaction_time")
         pyautogui.scroll(amount, left + x, top + y)
+        if self._timing:
+            self._human_delay("click_interval")
         logger.debug(f"PC scroll {amount} at ({x}, {y})")
 
     def type_text(self, text: str, interval: float = 0.01) -> None:
         """Type text into the game window."""
+        if self._timing:
+            self._human_delay("reaction_time")
+            # Human typists are irregular; sample per-character interval from
+            # a log-normal distribution if no explicit interval was requested.
+            if interval == 0.01:
+                interval_ms = self._timing.sample("click_interval")
+                interval = max(0.005, interval_ms / 1000.0)
         pyautogui.typewrite(text, interval=interval)
+        if self._timing:
+            self._human_delay("click_interval")
         logger.debug(f"Typed text: '{text}'")
 
     def press_key(self, key: str) -> None:
@@ -163,6 +180,21 @@ class PCInput:
         time.sleep(duration)
         win32api.keybd_event(vk, 0, win32con.KEYEVENTF_KEYUP, 0)
         logger.debug(f"Held key '{key}' for {duration:.2f}s (native)")
+
+    def share_decision_engine(self, decision_engine) -> None:
+        """Share a DecisionEngine instance (e.g. from StateMachine).
+
+        This keeps fatigue, frustration and distraction probabilities
+        consistent across the input layer and all actions.
+        """
+        self._decision = decision_engine
+        if self._error_sim is not None:
+            self._error_sim.decision = decision_engine
+        else:
+            from rokbot.humanization.error_simulator import ErrorSimulator
+
+            self._error_sim = ErrorSimulator(decision_engine)
+        logger.debug("DecisionEngine shared with PCInput")
 
     def move_to_safe_zone(self) -> None:
         """Move mouse to a safe corner to avoid covering UI elements during capture."""

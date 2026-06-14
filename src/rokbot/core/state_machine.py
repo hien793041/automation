@@ -72,6 +72,10 @@ class StateMachine:
                 base_distraction_rate=config.humanization.base_distraction_rate,
                 base_misclick_rate=config.humanization.base_misclick_rate,
             )
+            # Share the cognitive model with PCInput so fatigue/misclick state
+            # is consistent across input and action layers.
+            if self.pc_input is not None:
+                self.pc_input.share_decision_engine(self._decision_engine)
             logger.info("Humanization integrated into StateMachine")
 
     def _load_actions(self):

@@ -359,3 +359,31 @@ Những thay đổi nhỏ, impact lớn, ít rủi ro:
   - `pyproject.toml`: thêm `pytesseract`, `pyautogui`, `pywin32`; bỏ `paddleocr`, `paddlepaddle`
 
 **Kết luận**: Codebase đã được dọn dẹp đáng kể. Dead code được loại bỏ, humanization được integrate đầy đủ, và code duplication giảm ~150 dòng. Tất cả tests pass.
+
+---
+
+## 10. Changelog (2026-06-14) — Full action-layer humanization
+
+### Đã thực hiện
+
+- ✅ **Centralize humanization in `BaseAction`** (`src/rokbot/actions/base_action.py`):
+  - Shared `TimingEngine` instance for every action.
+  - Shared `DecisionEngine` from `StateMachine` so fatigue/frustration are consistent across the whole session.
+  - Helpers: `human_delay`, `pre_action_delay`, `post_action_delay`, `decision_delay`, `random_point_in_bbox`, `humanized_tap`, `humanized_tap_match`, `record_success`, `record_error`.
+- ✅ **Humanize `MapNavigationMixin`**:
+  - `random_point_in_bbox` now supports Gaussian jitter and edge margin.
+  - `_ensure_in_city` / `_ensure_in_world` use `transition_wait` distribution instead of `time.sleep(random.uniform(...))`.
+- ✅ **Humanize `PCInput`**:
+  - `key_back`, `type_text`, `scroll` now apply reaction/click-interval delays.
+  - `share_decision_engine()` lets `StateMachine` propagate cognitive state to the input layer.
+- ✅ **Add new timing distributions** in `TimingEngine` and `config/humanization.yaml`:
+  - `transition_wait`, `menu_wait`, `post_error_wait`.
+- ✅ **Refactor all actions** to use shared humanization helpers instead of hard-coded sleeps:
+  - `barbarian_attack`, `gather`, `gather_gem`
+  - `scout`, `train_troops`, `rally_fort`
+  - `scout_cave_high`, `scout_cave_low`
+  - `alliance_help`, `villager_help`, `reconnect`, `dynamic_combo`
+- ✅ **Remove duplicate `TimingEngine` / `_human_delay()`** from `BarbarianAttackAction`, `ScoutAction`, `TrainTroopsAction`.
+- ✅ **Update docs**: `docs/HUMANIZATION_ENGINE.md` now documents BaseAction integration and action-layer coverage.
+
+**Kết luận**: Every bot action now samples delays from fitted distributions and reports success/error to a shared cognitive model, making behavior significantly harder to distinguish from a real player. All existing tests pass.

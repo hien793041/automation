@@ -1,7 +1,6 @@
 """Scout Cave action — sends scouts to cave coordinates on the world map."""
 
 import random
-import time
 from pathlib import Path
 from typing import TYPE_CHECKING, List, Optional, Tuple
 
@@ -99,7 +98,7 @@ class ScoutCaveHighAction(BaseAction, MapNavigationMixin):
                     return (*best.center, best.bbox)
             if attempt < retries - 1:
                 logger.debug(f"[ScoutCaveHigh] Cave not found, retry {attempt + 1}/{retries}")
-                time.sleep(0.5)
+                self.human_delay("reaction_time", fallback_seconds=0.5)
                 self.state_machine.pc_input.move_to_safe_zone()
                 image = self.state_machine.screen_capture.capture()
         logger.info("[ScoutCaveHigh] No cave icon found after retries")
@@ -110,10 +109,10 @@ class ScoutCaveHighAction(BaseAction, MapNavigationMixin):
         tongquan_matches = self._matcher.match(image, template_name="tongquan", threshold=0.75)
         if tongquan_matches:
             btn = max(tongquan_matches, key=lambda m: m.confidence)
-            bx, by = self.random_point_in_bbox(btn.bbox)
+            bx, by = self.random_point_in_bbox(btn.bbox, jitter_sigma=1.0, edge_margin=2)
             logger.info(f"[ScoutCaveHigh] Opening tongquan tab at ({bx}, {by})")
             self.state_machine.pc_input.tap(bx, by)
-            time.sleep(random.uniform(0.8, 1.2))
+            self.human_delay("menu_wait", fallback_seconds=1.0)
             return True
 
         tongquan_opened = self._matcher.match(image, template_name="tongquan_opened", threshold=0.75)
@@ -130,6 +129,7 @@ class ScoutCaveHighAction(BaseAction, MapNavigationMixin):
             return False
 
         self.state_machine.pc_input.move_to_safe_zone()
+        self.pre_action_delay()
         image = self.state_machine.screen_capture.capture()
         if image is None:
             return False
@@ -173,6 +173,7 @@ class ScoutCaveHighAction(BaseAction, MapNavigationMixin):
 
         # 0. Open tongquan tab (works in both city and world) and check scout_available
         self.state_machine.pc_input.move_to_safe_zone()
+        self.pre_action_delay()
         image = self.state_machine.screen_capture.capture()
         if image is None:
             self.on_failure("Screenshot failed")
@@ -180,15 +181,15 @@ class ScoutCaveHighAction(BaseAction, MapNavigationMixin):
 
         city_state = self._detect_city_state(image)
         if city_state == "unknown":
-            logger.warning("[ScoutCaveHigh] Unknown state — retrying in 1s")
-            time.sleep(1.0)
+            logger.warning("[ScoutCaveHigh] Unknown state — retrying after delay")
+            self.human_delay("decision_time", fallback_seconds=1.0)
             self.state_machine.pc_input.move_to_safe_zone()
             image = self.state_machine.screen_capture.capture()
             if image is not None:
                 city_state = self._detect_city_state(image)
             if city_state == "unknown":
                 self.state_machine.pc_input.key_back()
-                time.sleep(random.uniform(1.0, 2.0))
+                self.human_delay("post_error_wait", fallback_seconds=1.5)
                 self.on_failure("Could not determine city/world state")
                 return False
 
@@ -236,10 +237,11 @@ class ScoutCaveHighAction(BaseAction, MapNavigationMixin):
         fy = fcy
         logger.info(f"[ScoutCaveHigh] Step 1/7: Tapping left of 'Find' at ({fx}, {fy}) offset={offset}")
         self.state_machine.pc_input.tap(fx, fy)
-        time.sleep(random.uniform(1.0, 2.0))
+        self.human_delay("menu_wait", fallback_seconds=1.5)
 
         # 2. Find the Find button inside popup to derive X/Y input positions
         self.state_machine.pc_input.move_to_safe_zone()
+        self.pre_action_delay()
         image = self.state_machine.screen_capture.capture()
         if image is None:
             return False
@@ -257,9 +259,9 @@ class ScoutCaveHighAction(BaseAction, MapNavigationMixin):
         input_x_y = fby
         logger.info(f"[ScoutCaveHigh] Step 2/7: Tapping X input at ({input_x_x}, {input_x_y}) offset={offset_x}")
         self.state_machine.pc_input.tap(input_x_x, input_x_y)
-        time.sleep(0.3)
+        self.human_delay("reaction_time", fallback_seconds=0.3)
         self.state_machine.pc_input.type_text(str(cave_x))
-        time.sleep(0.5)
+        self.human_delay("click_interval", fallback_seconds=0.5)
 
         # 4. Tap Y input (left of find_btn by ~100px, randomized for humanization)
         offset_y = random.randint(70, 110)
@@ -267,18 +269,19 @@ class ScoutCaveHighAction(BaseAction, MapNavigationMixin):
         input_y_y = fby
         logger.info(f"[ScoutCaveHigh] Step 3/7: Tapping Y input at ({input_y_x}, {input_y_y}) offset={offset_y}")
         self.state_machine.pc_input.tap(input_y_x, input_y_y)
-        time.sleep(0.3)
+        self.human_delay("reaction_time", fallback_seconds=0.3)
         self.state_machine.pc_input.type_text(str(cave_y))
-        time.sleep(0.5)
+        self.human_delay("click_interval", fallback_seconds=0.5)
 
         # 5. Tap Find button to search coordinates
-        cfx, cfy = self.random_point_in_bbox(find_btn.bbox)
+        cfx, cfy = self.random_point_in_bbox(find_btn.bbox, jitter_sigma=1.0, edge_margin=2)
         logger.info(f"[ScoutCaveHigh] Step 4/7: Tapping coordinate 'Find' at ({cfx}, {cfy})")
         self.state_machine.pc_input.tap(cfx, cfy)
-        time.sleep(3.0)  # Wait for map to load
+        self.human_delay("transition_wait", fallback_seconds=3.0, min_seconds=2.0)  # Wait for map to load
 
         # 5. Find cave icon (with retries for blinking exclamation)
         self.state_machine.pc_input.move_to_safe_zone()
+        self.pre_action_delay()
         image = self.state_machine.screen_capture.capture()
         if image is None:
             return False
@@ -293,10 +296,11 @@ class ScoutCaveHighAction(BaseAction, MapNavigationMixin):
         click_y = cy2
         logger.info(f"[ScoutCaveHigh] Step 5/7: Tapping cave bottom center at ({click_x}, {click_y})")
         self.state_machine.pc_input.tap(click_x, click_y)
-        time.sleep(random.uniform(1.0, 2.0))
+        self.human_delay("menu_wait", fallback_seconds=1.5)
 
         # 6. Tap Scout button
         self.state_machine.pc_input.move_to_safe_zone()
+        self.pre_action_delay()
         image = self.state_machine.screen_capture.capture()
         if image is None:
             return False
@@ -305,13 +309,14 @@ class ScoutCaveHighAction(BaseAction, MapNavigationMixin):
             logger.info("[ScoutCaveHigh] scout_btn not found")
             return False
         scout_btn = max(scout_matches, key=lambda m: m.confidence)
-        sx, sy = self.random_point_in_bbox(scout_btn.bbox)
+        sx, sy = self.random_point_in_bbox(scout_btn.bbox, jitter_sigma=1.0, edge_margin=2)
         logger.info(f"[ScoutCaveHigh] Step 6/7: Tapping 'Scout' at ({sx}, {sy})")
         self.state_machine.pc_input.tap(sx, sy)
-        time.sleep(random.uniform(1.0, 2.0))
+        self.human_delay("click_interval", fallback_seconds=1.5)
 
         # 7. Tap Send button
         self.state_machine.pc_input.move_to_safe_zone()
+        self.pre_action_delay()
         image = self.state_machine.screen_capture.capture()
         if image is None:
             return False
@@ -320,10 +325,10 @@ class ScoutCaveHighAction(BaseAction, MapNavigationMixin):
             logger.info("[ScoutCaveHigh] send_btn not found")
             return False
         send_btn = max(send_matches, key=lambda m: m.confidence)
-        send_x, send_y = self.random_point_in_bbox(send_btn.bbox)
+        send_x, send_y = self.random_point_in_bbox(send_btn.bbox, jitter_sigma=1.0, edge_margin=2)
         logger.info(f"[ScoutCaveHigh] Step 7/7: Tapping 'Send' at ({send_x}, {send_y})")
         self.state_machine.pc_input.tap(send_x, send_y)
-        time.sleep(random.uniform(1.0, 2.0))
+        self.human_delay("click_interval", fallback_seconds=1.5)
 
         # Mark cave as done after successful send
         self._mark_done(csv_idx)

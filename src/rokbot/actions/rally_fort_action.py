@@ -71,8 +71,6 @@ class RallyFortAction(BaseAction, MapNavigationMixin):
 
     def _read_km_from_crop(self, crop: np.ndarray, label: str = "") -> int:
         """OCR a km crop. Returns the numeric value or -1."""
-        import uuid
-
         if crop.size == 0:
             logger.debug(f"[RallyFort] Empty km crop {label}")
             return -1
@@ -149,6 +147,7 @@ class RallyFortAction(BaseAction, MapNavigationMixin):
             return False
 
         self.state_machine.pc_input.move_to_safe_zone()
+        self.pre_action_delay()
         image = self.state_machine.screen_capture.capture()
         if image is None:
             return False
@@ -172,11 +171,12 @@ class RallyFortAction(BaseAction, MapNavigationMixin):
                 return False
 
             btn = max(enter_matches, key=lambda m: m.confidence)
-            cx = roi_x1 + (btn.bbox[0] + btn.bbox[2]) // 2
-            cy = roi_y1 + (btn.bbox[1] + btn.bbox[3]) // 2
+            cx, cy = self.random_point_in_bbox(btn.bbox, jitter_sigma=1.0, edge_margin=2)
+            cx += roi_x1
+            cy += roi_y1
             logger.info(f"[RallyFort] Clicking enter_city_icon at ({cx}, {cy})")
             self.state_machine.pc_input.tap(cx, cy)
-            time.sleep(random.uniform(4.0, 6.0))
+            self.human_delay("transition_wait", fallback_seconds=4.0)
 
             # Re-check
             image = self.state_machine.screen_capture.capture()
@@ -212,6 +212,8 @@ class RallyFortAction(BaseAction, MapNavigationMixin):
                 return False
             self._last_failed_at = None
 
+        self.state_machine.pc_input.move_to_safe_zone()
+        self.pre_action_delay()
         image = self.state_machine.screen_capture.capture()
         if image is None:
             return False
@@ -251,6 +253,8 @@ class RallyFortAction(BaseAction, MapNavigationMixin):
 
         for attempt in range(1, max_retries + 1):
             # --- find and click fort_building1 ---
+            self.state_machine.pc_input.move_to_safe_zone()
+            self.pre_action_delay()
             image = self.state_machine.screen_capture.capture()
             if image is None:
                 logger.warning("[RallyFort] Screenshot failed during fort_building1")
@@ -262,12 +266,14 @@ class RallyFortAction(BaseAction, MapNavigationMixin):
                 return False
 
             best = max(matches, key=lambda m: m.confidence)
-            x, y = self.random_point_in_bbox(best.bbox)
+            x, y = self.random_point_in_bbox(best.bbox, jitter_sigma=1.0, edge_margin=2)
             logger.info(f"[RallyFort] Clicking fort_building1 at ({x}, {y}) conf={best.confidence:.2f}")
             self.state_machine.pc_input.tap(x, y)
-            time.sleep(random.uniform(1.0, 2.0))
+            self.human_delay("menu_wait", fallback_seconds=1.5)
 
             # --- check if fort_icon appears (correct building) ---
+            self.state_machine.pc_input.move_to_safe_zone()
+            self.pre_action_delay()
             image = self.state_machine.screen_capture.capture()
             if image is None:
                 logger.warning("[RallyFort] Screenshot failed after clicking fort_building1")
@@ -283,10 +289,10 @@ class RallyFortAction(BaseAction, MapNavigationMixin):
             close_matches = self._matcher.match(image, template_name="close_building", threshold=0.75)
             if close_matches:
                 best_close = max(close_matches, key=lambda m: m.confidence)
-                cx, cy = self.random_point_in_bbox(best_close.bbox)
+                cx, cy = self.random_point_in_bbox(best_close.bbox, jitter_sigma=1.0, edge_margin=2)
                 logger.info(f"[RallyFort] Clicking close_building at ({cx}, {cy}) conf={best_close.confidence:.2f}")
                 self.state_machine.pc_input.tap(cx, cy)
-                time.sleep(random.uniform(1.0, 2.0))
+                self.human_delay("click_interval", fallback_seconds=1.5)
             else:
                 logger.warning("[RallyFort] close_building not found either — aborting")
                 return False
@@ -297,6 +303,8 @@ class RallyFortAction(BaseAction, MapNavigationMixin):
         # --- remaining sequence after fort_icon is confirmed ---
         # Rally board is open — find all fort icons and all how_far texts,
         # pair them by row (smallest |dy|), then pick first one < MAX_KM.
+        self.state_machine.pc_input.move_to_safe_zone()
+        self.pre_action_delay()
         image = self.state_machine.screen_capture.capture()
         if image is None:
             logger.warning("[RallyFort] Screenshot failed on rally board")
@@ -356,10 +364,10 @@ class RallyFortAction(BaseAction, MapNavigationMixin):
             close_matches = self._matcher.match(image, template_name="close_building", threshold=0.75)
             if close_matches:
                 best_close = max(close_matches, key=lambda m: m.confidence)
-                cx, cy = self.random_point_in_bbox(best_close.bbox)
+                cx, cy = self.random_point_in_bbox(best_close.bbox, jitter_sigma=1.0, edge_margin=2)
                 logger.info(f"[RallyFort] Clicking close_building at ({cx}, {cy}) conf={best_close.confidence:.2f}")
                 self.state_machine.pc_input.tap(cx, cy)
-                time.sleep(random.uniform(0.5, 1.0))
+                self.human_delay("click_interval", fallback_seconds=0.8)
             return False
 
         chosen_fort = None
@@ -388,22 +396,24 @@ class RallyFortAction(BaseAction, MapNavigationMixin):
             close_matches = self._matcher.match(image, template_name="close_building", threshold=0.75)
             if close_matches:
                 best_close = max(close_matches, key=lambda m: m.confidence)
-                cx, cy = self.random_point_in_bbox(best_close.bbox)
+                cx, cy = self.random_point_in_bbox(best_close.bbox, jitter_sigma=1.0, edge_margin=2)
                 logger.info(f"[RallyFort] Clicking close_building at ({cx}, {cy}) conf={best_close.confidence:.2f}")
                 self.state_machine.pc_input.tap(cx, cy)
-                time.sleep(random.uniform(0.5, 1.0))
+                self.human_delay("click_interval", fallback_seconds=0.8)
             else:
                 self.state_machine.pc_input.key_back()
-                time.sleep(random.uniform(0.5, 1.0))
+                self.human_delay("post_error_wait", fallback_seconds=0.8)
             return False
 
         # Click the chosen fort_icon
-        x, y = self.random_point_in_bbox(chosen_fort.bbox)
+        x, y = self.random_point_in_bbox(chosen_fort.bbox, jitter_sigma=1.0, edge_margin=2)
         logger.info(f"[RallyFort] Clicking chosen fort_icon at ({x}, {y})")
         self.state_machine.pc_input.tap(x, y)
-        time.sleep(random.uniform(1.0, 2.0))
+        self.human_delay("menu_wait", fallback_seconds=1.5)
 
         # Click click_to_join
+        self.state_machine.pc_input.move_to_safe_zone()
+        self.pre_action_delay()
         image = self.state_machine.screen_capture.capture()
         if image is None:
             logger.warning("[RallyFort] Screenshot failed during click_to_join")
@@ -415,22 +425,24 @@ class RallyFortAction(BaseAction, MapNavigationMixin):
             close_matches = self._matcher.match(image, template_name="close_building", threshold=0.75)
             if close_matches:
                 best_close = max(close_matches, key=lambda m: m.confidence)
-                cx, cy = self.random_point_in_bbox(best_close.bbox)
+                cx, cy = self.random_point_in_bbox(best_close.bbox, jitter_sigma=1.0, edge_margin=2)
                 logger.info(f"[RallyFort] Clicking close_building at ({cx}, {cy}) conf={best_close.confidence:.2f}")
                 self.state_machine.pc_input.tap(cx, cy)
-                time.sleep(random.uniform(0.5, 1.0))
+                self.human_delay("click_interval", fallback_seconds=0.8)
             else:
                 self.state_machine.pc_input.key_back()
-                time.sleep(random.uniform(0.5, 1.0))
+                self.human_delay("post_error_wait", fallback_seconds=0.8)
             return False
 
         best = max(matches, key=lambda m: m.confidence)
-        x, y = self.random_point_in_bbox(best.bbox)
+        x, y = self.random_point_in_bbox(best.bbox, jitter_sigma=1.0, edge_margin=2)
         logger.info(f"[RallyFort] Clicking click_to_join at ({x}, {y}) conf={best.confidence:.2f}")
         self.state_machine.pc_input.tap(x, y)
-        time.sleep(random.uniform(1.0, 2.0))
+        self.human_delay("menu_wait", fallback_seconds=1.5)
 
         # --- new_troop → send_troop sequence ---
+        self.state_machine.pc_input.move_to_safe_zone()
+        self.pre_action_delay()
         image = self.state_machine.screen_capture.capture()
         if image is None:
             logger.warning("[RallyFort] Screenshot failed during new_troop")
@@ -440,15 +452,17 @@ class RallyFortAction(BaseAction, MapNavigationMixin):
         if not matches:
             logger.warning("[RallyFort] new_troop not found — pressing ESC and restarting")
             self.state_machine.pc_input.key_back()
-            time.sleep(random.uniform(0.5, 1.0))
+            self.human_delay("post_error_wait", fallback_seconds=0.8)
             return False
 
         best = max(matches, key=lambda m: m.confidence)
-        x, y = self.random_point_in_bbox(best.bbox)
+        x, y = self.random_point_in_bbox(best.bbox, jitter_sigma=1.0, edge_margin=2)
         logger.info(f"[RallyFort] Clicking new_troop at ({x}, {y}) conf={best.confidence:.2f}")
         self.state_machine.pc_input.tap(x, y)
-        time.sleep(random.uniform(1.0, 2.0))
+        self.human_delay("click_interval", fallback_seconds=1.5)
 
+        self.state_machine.pc_input.move_to_safe_zone()
+        self.pre_action_delay()
         image = self.state_machine.screen_capture.capture()
         if image is None:
             logger.warning("[RallyFort] Screenshot failed during send_troop")
@@ -460,21 +474,23 @@ class RallyFortAction(BaseAction, MapNavigationMixin):
             return False
 
         best = max(matches, key=lambda m: m.confidence)
-        x, y = self.random_point_in_bbox(best.bbox)
+        x, y = self.random_point_in_bbox(best.bbox, jitter_sigma=1.0, edge_margin=2)
         logger.info(f"[RallyFort] Clicking send_troop at ({x}, {y}) conf={best.confidence:.2f}")
         self.state_machine.pc_input.tap(x, y)
-        time.sleep(random.uniform(1.0, 2.0))
+        self.human_delay("click_interval", fallback_seconds=1.5)
 
         # Optional confirmation step
+        self.state_machine.pc_input.move_to_safe_zone()
+        self.pre_action_delay()
         image = self.state_machine.screen_capture.capture()
         if image is not None:
             confirm_matches = self._matcher.match(image, template_name="confirm_send_if_have", threshold=0.75)
             if confirm_matches:
                 best_confirm = max(confirm_matches, key=lambda m: m.confidence)
-                cx, cy = self.random_point_in_bbox(best_confirm.bbox)
+                cx, cy = self.random_point_in_bbox(best_confirm.bbox, jitter_sigma=1.0, edge_margin=2)
                 logger.info(f"[RallyFort] Clicking confirm_send_if_have at ({cx}, {cy}) conf={best_confirm.confidence:.2f}")
                 self.state_machine.pc_input.tap(cx, cy)
-                time.sleep(random.uniform(1.0, 2.0))
+                self.human_delay("click_interval", fallback_seconds=1.5)
 
         logger.info("[RallyFort] Rally join sequence completed")
         return True

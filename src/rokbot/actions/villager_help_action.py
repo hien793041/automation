@@ -1,9 +1,8 @@
 """Villager help action for accidentally clicked villagers."""
 
 import random
-import time
 from pathlib import Path
-from typing import TYPE_CHECKING, Optional, Tuple
+from typing import TYPE_CHECKING, Optional
 
 from loguru import logger
 
@@ -35,6 +34,7 @@ class VillagerHelpAction(BaseAction, MapNavigationMixin):
             return False
 
         self.state_machine.pc_input.move_to_safe_zone()
+        self.pre_action_delay()
         image = self.state_machine.screen_capture.capture()
         if image is None:
             return False
@@ -60,6 +60,7 @@ class VillagerHelpAction(BaseAction, MapNavigationMixin):
             return False
 
         self.state_machine.pc_input.move_to_safe_zone()
+        self.pre_action_delay()
         image = self.state_machine.screen_capture.capture()
         if image is None:
             self.on_failure("Screenshot failed")
@@ -81,10 +82,11 @@ class VillagerHelpAction(BaseAction, MapNavigationMixin):
         tap_y = min(img_h - 1, cy + offset_y)
         logger.info(f"[Villager] Step 1/2: Tapping below villager at ({cx}, {tap_y}) (offset +{offset_y})")
         self.state_machine.pc_input.tap(cx, tap_y)
-        time.sleep(random.uniform(1.0, 3.0))
+        self.human_delay("menu_wait", fallback_seconds=1.5)
 
         # Confirm the action
         self.state_machine.pc_input.move_to_safe_zone()
+        self.pre_action_delay()
         confirm_image = self.state_machine.screen_capture.capture()
         if confirm_image is None:
             return False
@@ -92,10 +94,10 @@ class VillagerHelpAction(BaseAction, MapNavigationMixin):
         confirm_matches = self._matcher.match(confirm_image, template_name=self.CONFIRM_TEMPLATE, threshold=0.75)
         if confirm_matches:
             confirm_btn = max(confirm_matches, key=lambda m: m.confidence)
-            cfx, cfy = self.random_point_in_bbox(confirm_btn.bbox)
+            cfx, cfy = self.random_point_in_bbox(confirm_btn.bbox, jitter_sigma=1.0, edge_margin=2)
             logger.info(f"[Villager] Step 2/2: Tapping confirm at ({cfx}, {cfy})")
             self.state_machine.pc_input.tap(cfx, cfy)
-            time.sleep(random.uniform(1.0, 3.0))
+            self.human_delay("click_interval", fallback_seconds=1.5)
             return True
 
         logger.info("[Villager] confirm_dan_lang not found")

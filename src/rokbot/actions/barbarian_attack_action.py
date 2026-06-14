@@ -1,16 +1,13 @@
 """Barbarian attack action for farming resources and experience."""
 
-import random
 import time
 from pathlib import Path
 from typing import TYPE_CHECKING, Optional, Tuple
 
-import numpy as np
 from loguru import logger
 
 from rokbot.actions.base_action import BaseAction
 from rokbot.core.config import BotConfig
-from rokbot.humanization.timing_engine import TimingEngine
 from rokbot.vision.template_matcher import TemplateMatcher
 from rokbot.utils.map_navigation import MapNavigationMixin
 
@@ -38,30 +35,15 @@ class BarbarianAttackAction(BaseAction, MapNavigationMixin):
             templates_dir=self.SHARED_TEMPLATES_DIR,
             threshold=0.80,
         )
-        self._timing = TimingEngine(
-            profile_path=config.humanization.profile_path
-            if config.humanization.profile_path and config.humanization.profile_path.exists()
-            else None
-        )
-        self._humanization_enabled = config.humanization.enabled
         self._last_success_time: Optional[float] = None
         self._cooldown_seconds = 10.0
-
-    def _human_delay(self, distribution: str = "click_interval", fallback_seconds: float = 0.5) -> None:
-        if self._humanization_enabled:
-            delay_ms = self._timing.sample(distribution)
-            time.sleep(max(0.05, delay_ms / 1000.0))
-        else:
-            time.sleep(fallback_seconds)
-
-        logger.warning("Could not determine city/world state")
-        return False
 
     def can_execute(self) -> bool:
         if self.state_machine is None or self.state_machine.screen_capture is None:
             return False
 
         self.state_machine.pc_input.move_to_safe_zone()
+        self.pre_action_delay()
         image = self.state_machine.screen_capture.capture()
         if image is None:
             return False
@@ -115,6 +97,7 @@ class BarbarianAttackAction(BaseAction, MapNavigationMixin):
 
         # 0. Verify troops are available FIRST (works in both city and world)
         self.state_machine.pc_input.move_to_safe_zone()
+        self.pre_action_delay()
         image = self.state_machine.screen_capture.capture()
         if image is None:
             self.on_failure("Screenshot failed")
@@ -153,13 +136,13 @@ class BarbarianAttackAction(BaseAction, MapNavigationMixin):
         # 1. Tap "Find" button on world map
         find_matches = self._matcher.match(image, template_name="world_find_btn", threshold=0.80)
         if not find_matches:
-            logger.debug("Find button not found on world map")
+            logger.warning("[Barbarian] Find button not found on world map")
             return False
         find_btn = max(find_matches, key=lambda m: m.confidence)
-        fx, fy = self.random_point_in_bbox(find_btn.bbox)
+        fx, fy = self.random_point_in_bbox(find_btn.bbox, jitter_sigma=1.0, edge_margin=2)
         logger.info(f"[Barbarian] Step 1/7: Tapping 'Find' on world map at ({fx}, {fy})")
         self.state_machine.pc_input.tap(fx, fy)
-        time.sleep(random.uniform(1.0, 3.0))
+        self.human_delay("menu_wait", fallback_seconds=1.5)
 
         # 2. Select barbarian from the menu
         # self.state_machine.pc_input.move_to_safe_zone()
@@ -178,36 +161,72 @@ class BarbarianAttackAction(BaseAction, MapNavigationMixin):
 
         # 3. Tap "Find" button inside the menu to search nearby barbarians
         self.state_machine.pc_input.move_to_safe_zone()
+        self.pre_action_delay()
         search_image = self.state_machine.screen_capture.capture()
         if search_image is None:
             return False
         menu_find_matches = self._matcher.match(search_image, template_name="menu_find_btn", threshold=0.80)
         if not menu_find_matches:
-            logger.debug("Menu Find button not found")
+            logger.warning("[Barbarian] Menu Find button not found")
             return False
         menu_find_btn = max(menu_find_matches, key=lambda m: m.confidence)
-        mfx, mfy = self.random_point_in_bbox(menu_find_btn.bbox)
+        mfx, mfy = self.random_point_in_bbox(menu_find_btn.bbox, jitter_sigma=1.0, edge_margin=2)
         logger.info(f"[Barbarian] Step 3/7: Tapping 'Find' in menu at ({mfx}, {mfy})")
         self.state_machine.pc_input.tap(mfx, mfy)
-        time.sleep(random.uniform(1.8, 2.2))
+        self.human_delay("menu_wait", fallback_seconds=2.3)
+
+        # 3b. If the menu Find button is still visible, the search did not register
+        # or no barbarian was found. Wait a bit and retry tapping it.
+        max_menu_find_retries = 3
+        for retry in range(max_menu_find_retries):
+            self.state_machine.pc_input.move_to_safe_zone()
+            self.pre_action_delay()
+            post_search_image = self.state_machine.screen_capture.capture()
+            if post_search_image is None:
+                return False
+            still_visible = self._matcher.match(
+                post_search_image, template_name="menu_find_btn", threshold=0.80
+            )
+            if not still_visible:
+                logger.info("[Barbarian] Menu Find button disappeared, proceeding to attack")
+                break
+
+            retry_btn = max(still_visible, key=lambda m: m.confidence)
+            rfx, rfy = self.random_point_in_bbox(retry_btn.bbox, jitter_sigma=1.0, edge_margin=2)
+            self.human_delay("decision_time", fallback_seconds=1.5)
+            logger.info(
+                f"[Barbarian] menu_find_btn still visible after search "
+                f"(retry {retry + 1}/{max_menu_find_retries}); tapping again at ({rfx}, {rfy})"
+            )
+            self.state_machine.pc_input.tap(rfx, rfy)
+            self.human_delay("menu_wait", fallback_seconds=2.0)
+        else:
+            logger.warning("[Barbarian] Menu Find button still visible after all retries, no barbarian found — pressing ESC to reset")
+            self.state_machine.pc_input.key_back()
+            self.human_delay("post_error_wait", fallback_seconds=1.5)
+            return False
 
         # 4. Tap Attack button on the barbarian popup
         self.state_machine.pc_input.move_to_safe_zone()
+        self.pre_action_delay()
         attack_image = self.state_machine.screen_capture.capture()
         if attack_image is None:
             return False
         attack_matches = self._matcher.match(attack_image, template_name="attack_button", threshold=0.80)
         if not attack_matches:
-            logger.debug("Attack button not found")
+            logger.warning("[Barbarian] Attack button not found — pressing ESC to reset")
+            self.state_machine.pc_input.key_back()
+            self.human_delay("post_error_wait", fallback_seconds=1.5)
             return False
         attack_btn = max(attack_matches, key=lambda m: m.confidence)
-        ax, ay = self.random_point_in_bbox(attack_btn.bbox)
+        ax, ay = self.random_point_in_bbox(attack_btn.bbox, jitter_sigma=1.0, edge_margin=2)
         logger.info(f"[Barbarian] Step 4/7: Tapping 'Attack' at ({ax}, {ay})")
         self.state_machine.pc_input.tap(ax, ay)
-        time.sleep(random.uniform(1.0, 3.0))
+        self.human_delay("click_interval", fallback_seconds=1.5)
 
         # 5. Choose troop attack
         self.state_machine.pc_input.move_to_safe_zone()
+        self.pre_action_delay()
         choose_image = self.state_machine.screen_capture.capture()
         if choose_image is None:
             return False
@@ -216,13 +235,14 @@ class BarbarianAttackAction(BaseAction, MapNavigationMixin):
             logger.info("[Barbarian] choose_troop_attack not found")
             return False
         choose_btn = max(choose_matches, key=lambda m: m.confidence)
-        chx, chy = self.random_point_in_bbox(choose_btn.bbox)
+        chx, chy = self.random_point_in_bbox(choose_btn.bbox, jitter_sigma=1.0, edge_margin=2)
         logger.info(f"[Barbarian] Step 5/7: Tapping 'Choose Troop Attack' at ({chx}, {chy})")
         self.state_machine.pc_input.tap(chx, chy)
-        time.sleep(random.uniform(1.0, 3.0))
+        self.human_delay("click_interval", fallback_seconds=1.5)
 
         # 6. Use existing troops (pre-configured) — check both templates
         self.state_machine.pc_input.move_to_safe_zone()
+        self.pre_action_delay()
         troop_image = self.state_machine.screen_capture.capture()
         if troop_image is None:
             return False
@@ -237,10 +257,10 @@ class BarbarianAttackAction(BaseAction, MapNavigationMixin):
                 break
 
         if existing_btn is not None:
-            ex, ey = self.random_point_in_bbox(existing_btn.bbox)
+            ex, ey = self.random_point_in_bbox(existing_btn.bbox, jitter_sigma=1.0, edge_margin=2)
             logger.info(f"[Barbarian] Step 6/7: Tapping '{existing_name}' at ({ex}, {ey})")
             self.state_machine.pc_input.tap(ex, ey)
-            time.sleep(random.uniform(1.0, 3.0))
+            self.human_delay("click_interval", fallback_seconds=1.5)
             return True
 
         logger.info("[Barbarian] existing_troops / existing_troops1 not found")
