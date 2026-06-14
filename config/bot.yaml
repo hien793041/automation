@@ -1,18 +1,13 @@
 # Main bot configuration
 project_name: rok-bot-engine
-log_level: INFO
 screenshot_interval_seconds: 2.0
 max_retry_attempts: 3
 stuck_threshold_seconds: 3600.0
 
 vision:
   yolo_model_path: models/yolo/rok_ui_v8.pt
-  yolo_onnx_path: models/yolo/rok_ui_v8.onnx
-  labels_path: models/yolo/labels.yaml
   confidence_threshold: 0.5
-  iou_threshold: 0.45
   ocr_lang: eng+vie
-  template_fallback: true
 
 humanization:
   enabled: true
@@ -20,26 +15,15 @@ humanization:
   # When false, timing/movement/misclick humanization still works but bot won't random-sleep.
   schedule_enabled: false
   profile_path: null
-  reaction_time_mu: 350.0
-  reaction_time_sigma: 80.0
-  click_interval_shape: 0.8
-  click_interval_scale: 1.2
   fatigue_half_life_hours: 2.0
   base_distraction_rate: 0.08
   base_misclick_rate: 0.01
+  # Detailed timing/movement distributions are loaded from config/humanization.yaml.
 
 pc:
   window_title: "Rise of Kingdoms"
   # Uncomment and adjust if your game window title is different (e.g., Vietnamese locale)
   # window_title: "Rise of Kingdoms"
-
-# Emulator config kept for backward compatibility but not used in PC mode
-emulator:
-  adb_host: 127.0.0.1
-  adb_port: 5555
-  device_serial: null
-  scrcpy_enabled: false
-  scrcpy_port: 27183
 
 actions:
   enabled_actions:
@@ -50,4 +34,3 @@ actions:
     - train_troops
     - reconnect
   priorities: {}
-  default_timeout_seconds: 30.0

@@ -23,7 +23,7 @@ def main():
     parser.add_argument("--bot", required=True, help="Path to bot timing JSON")
     args = parser.parse_args()
 
-    print("Comparing human vs bot... (implement data loading)")
+    print(f"Comparing {args.human} vs {args.bot}... (implement data loading)")
     # TODO: load and compare
 
 

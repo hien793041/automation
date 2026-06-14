@@ -43,8 +43,8 @@ def main() -> int:
 
     pc_input = None
     if not args.dry_run:
-        from rokbot.pc_controller.window_manager import WindowManager
         from rokbot.pc_controller.pc_input import PCInput
+        from rokbot.pc_controller.window_manager import WindowManager
 
         wm = WindowManager()
         if wm.hwnd is None:

@@ -1,10 +1,8 @@
 """Unit tests for actions."""
 
-import pytest
 
 from rokbot.actions.action_factory import ActionFactory
 from rokbot.actions.gather_action import GatherAction
-from rokbot.core.config import BotConfig
 from rokbot.core.state_machine import StateMachine
 
 

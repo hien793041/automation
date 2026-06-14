@@ -1,7 +1,7 @@
 """Simulates human-like errors: misclicks, wrong-button presses."""
 
 import random
-from typing import Optional, Tuple
+from typing import Tuple
 
 from loguru import logger
 
@@ -27,10 +27,3 @@ class ErrorSimulator:
             return actual
         return target
 
-    def maybe_wrong_button(self, intended_action: str, alternatives: list) -> str:
-        """Occasionally return a different action than intended."""
-        if self.decision.change_mind() and alternatives:
-            wrong = random.choice(alternatives)
-            logger.info(f"Simulated wrong button: intended={intended_action}, actual={wrong}")
-            return wrong
-        return intended_action

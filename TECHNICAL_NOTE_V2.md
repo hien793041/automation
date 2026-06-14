@@ -23,79 +23,60 @@
 
 ## 2. VISION PIPELINE (Accuracy Engine)
 
-### 2.1 Three-Stage Detection
+### 2.1 Detection Pipeline
 
 ```
 Input: Screenshot (1920x1080)
     |
     V
-Stage 1: YOLOv8 Object Detection
-  - Detect all UI elements simultaneously
-  - Classes: 50+ UI elements
+Stage 1: Template Matching
+  - Detect UI elements via OpenCV template matching
   - Output: bbox + class + confidence
   - Threshold: class-dependent (0.5-0.9)
     |
-    +-- High conf (>0.85) --> Use YOLO
+    +-- Match found --> Use template result
     |
-    +-- Low conf (0.5-0.85) --> Stage 2
-                            |
-                            V
-                    Stage 2: OCR Verification
-                      - Read text near bbox
-                      - Verify context
-                      - Example: "Gather" text near gather_btn bbox
-                            |
-                            +-- Match --> Use
-                            |
-                            +-- Mismatch --> Stage 3
-                                          |
-                                          V
-                                Stage 3: Template Fallback
-                                  - OpenCV template match
-                                  - Specific region only
-                                  - Last resort
+    +-- No match --> Stage 2
+                  |
+                  V
+          Stage 2: OCR Verification
+            - Read text near expected region
+            - Verify context
+            - Example: "Gather" text near gather_btn bbox
+                  |
+                  +-- Match --> Use
+                  |
+                  +-- Mismatch --> Fail / retry
 ```
 
-### 2.2 YOLO Model Architecture
+### 2.2 Template Matching
 
-**File**: `rokbot/vision/yolo_detector.py`
+**File**: `rokbot/vision/template_matcher.py`
 
-**Responsibility**: Detect UI elements with per-class confidence calibration.
+**Responsibility**: Detect UI elements via OpenCV template matching with optional ROI and multi-scale support.
 
 **Key Design**:
-- Load YOLOv8 model from `.pt` file
-- Per-class thresholds learned from validation (not uniform)
+- Per-class thresholds defined in code/config
 - Higher threshold for critical elements (e.g., connection_lost = 0.92)
 - Lower threshold for small/variable elements (e.g., icon_marching = 0.75)
 
-**Output**: List of DetectionResult (class_name, confidence, bbox, center)
+**Output**: List of detection results (class_name, confidence, bbox, center)
 
-**Fallback**: If YOLO fails, delegate to TemplateMatcher
+**Fallback**: OCR or heuristic color checks
 
 ### 2.3 OCR Engine with Context Verification
 
 **File**: `rokbot/vision/ocr_engine.py`
 
-**Responsibility**: Read text from screenshots and verify YOLO detections.
+**Responsibility**: Read text from screenshots and verify detections.
 
 **Key Design**:
-- PaddleOCR backend (English, no GPU by default)
+- Tesseract OCR backend (`pytesseract`)
 - ROI targeting: only process specific regions
 - Timer parsing: HH:MM:SS, MM:SS formats
 - Context verification: read text near detected bbox to confirm class
 
-**Example**: YOLO detects "gather_btn" but OCR reads "Attack" nearby -> mismatch, reject detection
-
-### 2.4 Confidence Calibration System
-
-**File**: `rokbot/vision/confidence_calibrator.py`
-
-**Responsibility**: Auto-tune per-class thresholds based on validation metrics.
-
-**Input**: JSON with per-class metrics (TP, FP, FN, confidence scores)
-**Output**: Optimal threshold for target precision (default 0.95)
-
-**Algorithm**: Sort confidence scores, find threshold where precision >= target
+**Example**: Template detects "gather_btn" but OCR reads "Attack" nearby -> mismatch, reject detection
 
 ---
 
@@ -217,14 +198,11 @@ Human Gameplay Recording
 
 ### 5.1 Human Recorder
 
-**File**: `rokbot/telemetry/human_recorder.py`
+> Removed: `scripts/record_human.py` and the `rokbot/telemetry/` package have been deleted.
+>
+> Humanization parameters are now defined in `config/humanization.yaml` or loaded from an optional JSON timing profile.
 
-**Records**:
-- Touch events: x, y, pressure, action (down/move/up), timestamp
-- Timing events: event_type, duration_ms, context
-- Screenshots: timed captures during gameplay
-
-**Output**: Per-session JSON with all events + metadata
+If you collect human gameplay data externally, store it under `data/human_recordings/` and use `scripts/fit_distributions.py` to derive parameters.
 
 ### 5.2 Distribution Fitting
 
@@ -248,21 +226,21 @@ Human Gameplay Recording
 | Process | No game process modification | Undetectable |
 | Memory | No injection/hook | Undetectable |
 | Network | Normal request pattern | Low risk |
-| Input | ADB shell input (system layer) | Medium risk |
+| Input | Windows PC input (`pyautogui` + `win32gui`) | Low risk |
 | Timing | Distribution-based (not random) | Medium risk |
 | Behavior | Fatigue, distraction, errors | Medium risk |
-| Device | Emulator fingerprint spoofing | Medium risk |
+| Device | PC client, no emulator | Low risk |
 
 ### 6.2 Biometric Profile
 
-**File**: `rokbot/humanization/biometric_profile.py`
-
-**Concept**: Each bot instance uses ONE consistent human profile (not random per action). This creates consistent "personality" across sessions.
+**Concept**: Each bot instance uses ONE consistent human profile loaded from `config/humanization.yaml` or an optional JSON timing profile. This creates consistent "personality" across sessions.
 
 **Profile includes**:
 - Timing distributions (reaction, click interval, decision)
-- Movement jerk profile
+- Movement parameters (Fitts's law, jitter)
 - Personality traits (base distraction rate, fatigue rate)
+
+The same `DecisionEngine` instance is shared between `StateMachine`, `PCInput`, and every `BaseAction`, so fatigue and frustration accumulate consistently.
 
 ---
 
@@ -310,9 +288,11 @@ python = "^3.11"
 
 # Vision
 opencv-python = "^4.8.1"
-ultralytics = "^8.0.0"        # YOLOv8
-paddleocr = "^2.7.0"          # OCR
-paddlepaddle = "^2.5.0"      # Paddle backend
+pytesseract = "^0.3.13"       # OCR
+
+# PC input
+pyautogui = "^0.9.54"
+pywin32 = "^300"
 
 # Scientific
 numpy = "^1.24.0"
@@ -346,11 +326,11 @@ plotly = "^5.15.0"
 | Decision | Rationale |
 |----------|-----------|
 | Python primary | Best CV/ML ecosystem (YOLO, PaddleOCR) |
-| YOLO over template matching | Robust to UI variations, higher accuracy |
-| OCR verification | Reduce false positives in ambiguous states |
+| Template matching + OCR | Robust enough for PC UI, simpler maintenance |
+| OCR verification | Reduce false positives in ambiguous states (Tesseract) |
 | Distribution-based humanization | Statistically indistinguishable from human |
 | Per-class confidence threshold | Optimize precision/recall per UI element |
-| Human data collection | Foundation for realistic behavior simulation |
+| YAML-driven humanization | Foundation for realistic behavior simulation |
 | Optional Rust extensions | Performance bottleneck optimization only |
 | Modular architecture | Easy to swap vision/humanization components |
 

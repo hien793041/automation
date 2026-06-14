@@ -45,6 +45,14 @@ class MapNavigationMixin:
         py = random.randint(y1, max(y1, y2 - 1))
         return (px, py)
 
+    def _use_hotkey_for_city_toggle(self) -> bool:
+        """Randomly decide whether to use the Space hotkey to toggle city/world.
+
+        Returns True with a fixed probability. Using the hotkey sometimes and
+        clicking the icon other times makes the input pattern less predictable.
+        """
+        return random.random() < 0.5
+
     @staticmethod
     def roi_from_ratio(
         image: np.ndarray, ratio: Tuple[float, float, float, float]
@@ -108,8 +116,14 @@ class MapNavigationMixin:
             cx, cy = self.random_point_in_bbox((bx1, by1, bx2, by2), edge_margin=2)
             cx += roi_x1
             cy += roi_y1
-            logger.info(f"In world — entering city at ({cx}, {cy})")
-            pc_input.tap(cx, cy)
+
+            # Humanization: randomly use the Space hotkey instead of clicking the icon.
+            if self._use_hotkey_for_city_toggle():
+                logger.info("[MapNav] In world — entering city via Space hotkey")
+                pc_input.press_key("space")
+            else:
+                logger.info(f"[MapNav] In world — entering city at ({cx}, {cy})")
+                pc_input.tap(cx, cy)
             self.human_delay("transition_wait", fallback_seconds=1.5)
             return True
 
@@ -143,8 +157,14 @@ class MapNavigationMixin:
             cx, cy = self.random_point_in_bbox((bx1, by1, bx2, by2), edge_margin=2)
             cx += roi_x1
             cy += roi_y1
-            logger.info(f"In city — switching to world map at ({cx}, {cy})")
-            pc_input.tap(cx, cy)
+
+            # Humanization: randomly use the Space hotkey instead of clicking the icon.
+            if self._use_hotkey_for_city_toggle():
+                logger.info("[MapNav] In city — switching to world map via Space hotkey")
+                pc_input.press_key("space")
+            else:
+                logger.info(f"[MapNav] In city — switching to world map at ({cx}, {cy})")
+                pc_input.tap(cx, cy)
             self.human_delay("transition_wait", fallback_seconds=1.5)
             return True
 

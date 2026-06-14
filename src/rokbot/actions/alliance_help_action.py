@@ -7,8 +7,8 @@ from loguru import logger
 
 from rokbot.actions.base_action import BaseAction
 from rokbot.core.config import BotConfig
-from rokbot.vision.template_matcher import TemplateMatcher
 from rokbot.utils.map_navigation import MapNavigationMixin
+from rokbot.vision.template_matcher import TemplateMatcher
 
 if TYPE_CHECKING:
     from rokbot.core.state_machine import StateMachine

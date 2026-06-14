@@ -7,19 +7,20 @@
 | Process | No game modification | Undetectable |
 | Memory | No injection/hook | Undetectable |
 | Network | Normal request pattern | Low |
-| Input | ADB shell input | Medium |
-| Timing | Distribution-based | Medium |
+| Input | Windows PC input (`win32gui` + `pyautogui`) | Low |
+| Timing | Distribution-based delays | Medium |
 | Behavior | Fatigue, distraction, errors | Medium |
-| Device | Emulator fingerprint spoofing | Medium |
+| Device | PC client, no emulator | Low |
 
 ## Biometric Profile
 
-Each bot instance uses ONE consistent profile:
-- Timing distributions
-- Movement jerk profile
-- Personality traits
+Each bot instance uses ONE consistent profile, loaded from `config/humanization.yaml` or an optional JSON timing profile:
 
-This creates consistent "personality" across sessions, unlike random-per-action bots.
+- Timing distributions (`reaction_time`, `click_interval`, `decision_time`, ...)
+- Movement profile (Fitts's-law Bezier paths, jitter)
+- Fatigue / distraction / misclick rates
+
+`DecisionEngine` is shared between `StateMachine`, `PCInput`, and every `BaseAction`, so fatigue and frustration accumulate consistently across the whole session instead of resetting per action.
 
 ## Recommendations
 

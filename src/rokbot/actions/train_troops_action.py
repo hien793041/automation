@@ -1,6 +1,6 @@
 """Train troops action for producing units in the city."""
 
-import random
+import math
 from pathlib import Path
 from typing import TYPE_CHECKING, List, Optional, Tuple
 
@@ -103,26 +103,36 @@ class TrainTroopsAction(BaseAction, MapNavigationMixin):
         exception_matches = []
         if self.USE_EXCEPTION_TRAIN:
             exception_matches = self._matcher.match(
-                image, template_name="exception_train", threshold=0.75, max_matches=10
+                image,
+                template_name="exception_train",
+                threshold=0.80,
+                max_matches=10,
+                roi=panel_roi,
             )
 
         valid_bboxes: List[Tuple[int, int, int, int]] = []
         for tm in text_matches:
             tx, ty = tm.center
             is_exception = False
+            closest_exception_distance = float("inf")
             for em in exception_matches:
-                ex1, ey1, ex2, ey2 = em.bbox
-                if ex1 <= tx <= ex2 and ey1 <= ty <= ey2:
+                ex, ey = em.center
+                distance = math.hypot(tx - ex, ty - ey)
+                closest_exception_distance = min(closest_exception_distance, distance)
+                # Only treat as exception if the exception icon/row is very close
+                # to this text line (same building row).
+                if distance <= 50:
                     is_exception = True
                     logger.info(
-                        f"[Train] Skipping 'khong_hoat_dong_text' inside exception_train "
+                        f"[Train] Skipping 'khong_hoat_dong_text' near exception_train "
                         f"at {tm.bbox} conf={tm.confidence:.2f}"
                     )
                     break
             if not is_exception:
                 logger.info(
                     f"[Train] Detected 'khong_hoat_dong_text' at {tm.bbox} "
-                    f"conf={tm.confidence:.2f}"
+                    f"conf={tm.confidence:.2f} "
+                    f"(closest_exception_distance={closest_exception_distance:.1f}px)"
                 )
                 valid_bboxes.append(tm.bbox)
 

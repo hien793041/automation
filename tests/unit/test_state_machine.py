@@ -1,9 +1,7 @@
 """Unit tests for state machine."""
 
-import pytest
 
 from rokbot.core.state_machine import BotState, StateMachine
-from rokbot.core.exceptions import StuckError
 
 
 def test_state_machine_initial_state(bot_config):

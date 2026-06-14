@@ -12,7 +12,6 @@ import sys
 from pathlib import Path
 
 import cv2
-import numpy as np
 from loguru import logger
 
 sys.path.insert(0, str(Path(__file__).parent.parent))

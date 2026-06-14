@@ -1,6 +1,5 @@
 """Scout Cave action — sends scouts to cave coordinates on the world map."""
 
-import random
 from pathlib import Path
 from typing import TYPE_CHECKING, List, Optional, Tuple
 
@@ -10,8 +9,8 @@ from loguru import logger
 
 from rokbot.actions.base_action import BaseAction
 from rokbot.core.config import BotConfig
-from rokbot.vision.template_matcher import TemplateMatcher
 from rokbot.utils.map_navigation import MapNavigationMixin
+from rokbot.vision.template_matcher import TemplateMatcher
 
 if TYPE_CHECKING:
     from rokbot.core.state_machine import StateMachine
@@ -233,7 +232,7 @@ class ScoutCaveLowAction(BaseAction, MapNavigationMixin):
             return False
         building_btn = max(building_matches, key=lambda m: m.confidence)
         bbx, bby = self.random_point_in_bbox(building_btn.bbox, jitter_sigma=1.0, edge_margin=2)
-        logger.info(f"[ScoutCaveLow] Step 2/6: Tapping scout_building at ({bbx}, {bby})")
+        logger.info(f"[ScoutCaveLow] Step 2/7: Tapping scout_building at ({bbx}, {bby})")
         self.state_machine.pc_input.tap(bbx, bby)
         self.human_delay("menu_wait", fallback_seconds=1.5)
 
@@ -249,7 +248,7 @@ class ScoutCaveLowAction(BaseAction, MapNavigationMixin):
             return False
         scout_btn = max(scout_btn_matches, key=lambda m: m.confidence)
         sbx, sby = self.random_point_in_bbox(scout_btn.bbox, jitter_sigma=1.0, edge_margin=2)
-        logger.info(f"[ScoutCaveLow] Step 3/6: Tapping scout_button at ({sbx}, {sby})")
+        logger.info(f"[ScoutCaveLow] Step 3/7: Tapping scout_button at ({sbx}, {sby})")
         self.state_machine.pc_input.tap(sbx, sby)
         self.human_delay("menu_wait", fallback_seconds=1.5)
 
@@ -265,7 +264,7 @@ class ScoutCaveLowAction(BaseAction, MapNavigationMixin):
             return False
         cave_tab = max(cave_tab_matches, key=lambda m: m.confidence)
         ctx, cty = self.random_point_in_bbox(cave_tab.bbox, jitter_sigma=1.0, edge_margin=2)
-        logger.info(f"[ScoutCaveLow] Step 4/6: Tapping cave_tab at ({ctx}, {cty})")
+        logger.info(f"[ScoutCaveLow] Step 4/7: Tapping cave_tab at ({ctx}, {cty})")
         self.state_machine.pc_input.tap(ctx, cty)
         self.human_delay("menu_wait", fallback_seconds=1.5)
 
@@ -283,7 +282,7 @@ class ScoutCaveLowAction(BaseAction, MapNavigationMixin):
         gx1, gy1, gx2, gy2 = go_btn.bbox
         click_x = (gx1 + gx2) // 2
         click_y = gy2
-        logger.info(f"[ScoutCaveLow] Step 5/6: Tapping go_btn bottom at ({click_x}, {click_y})")
+        logger.info(f"[ScoutCaveLow] Step 5/7: Tapping go_btn bottom at ({click_x}, {click_y})")
         self.state_machine.pc_input.tap(click_x, click_y)
         self.human_delay("transition_wait", fallback_seconds=3.0, min_seconds=2.0)
 
@@ -299,7 +298,7 @@ class ScoutCaveLowAction(BaseAction, MapNavigationMixin):
             return False
         scout_btn = max(scout_matches, key=lambda m: m.confidence)
         sx, sy = self.random_point_in_bbox(scout_btn.bbox, jitter_sigma=1.0, edge_margin=2)
-        logger.info(f"[ScoutCaveLow] Step 6/6: Tapping 'Scout' at ({sx}, {sy})")
+        logger.info(f"[ScoutCaveLow] Step 6/7: Tapping 'Scout' at ({sx}, {sy})")
         self.state_machine.pc_input.tap(sx, sy)
         self.human_delay("click_interval", fallback_seconds=1.5)
 

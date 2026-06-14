@@ -16,68 +16,48 @@ rok-bot-engine/
 │   │   │
 │   │   ├── 📁 vision/                       # Computer Vision layer
 │   │   │   ├── __init__.py
-│   │   │   ├── yolo_detector.py             # YOLOv8 UI element detection
-│   │   │   ├── ocr_engine.py                # PaddleOCR / EasyOCR wrapper
-│   │   │   ├── template_matcher.py          # OpenCV fallback matching
-│   │   │   ├── screen_capture.py            # ADB screencap / scrcpy
+│   │   │   ├── ocr_engine.py                # Tesseract OCR wrapper
+│   │   │   ├── template_matcher.py          # OpenCV template matching
 │   │   │   ├── image_preprocessor.py        # Resize, denoise, enhance
-│   │   │   ├── region_of_interest.py        # ROI selector & manager
-│   │   │   └── confidence_calibrator.py     # Per-class threshold tuning
+│   │   │   └── region_of_interest.py        # ROI selector & manager
 │   │   │
-│   │   ├── 📁 humanization/                  # Humanization engine (CRITICAL)
+│   │   ├── 📁 humanization/                  # Humanization engine
 │   │   │   ├── __init__.py
 │   │   │   ├── timing_engine.py             # Distribution-based delays
-│   │   │   ├── movement_engine.py           # Bezier + jerk-limited paths
+│   │   │   ├── movement_engine.py           # Bezier + Fitts's-law paths
 │   │   │   ├── decision_engine.py           # Fatigue, distraction, emotion
-│   │   │   ├── error_simulator.py           # Misclick, wrong-button
-│   │   │   ├── session_manager.py           # Bimodal sessions, Poisson breaks
-│   │   │   ├── biometric_profile.py         # Human data profile loader
-│   │   │   └── distributions/               # Fitted distributions
-│   │   │       ├── reaction_time.json       # Gaussian(mu,sigma) from real data
-│   │   │       ├── click_interval.json      # Log-normal params
-│   │   │       ├── session_length.json      # Bimodal distribution
-│   │   │       ├── movement_jerk.json       # Jerk profile data
-│   │   │       └── break_interval.json      # Poisson lambda parameter
+│   │   │   ├── error_simulator.py           # Misclick injection
+│   │   │   └── session_manager.py           # Bimodal sessions, Poisson breaks
 │   │   │
 │   │   ├── 📁 actions/                       # Game actions
 │   │   │   ├── __init__.py
-│   │   │   ├── base_action.py               # Abstract base
+│   │   │   ├── base_action.py               # Abstract base + humanization helpers
+│   │   │   ├── action_factory.py            # Action registry & factory
+│   │   │   ├── combo_loader.py              # Load combos.yaml
+│   │   │   ├── dynamic_combo_action.py      # User-defined action sequences
 │   │   │   ├── gather_action.py             # Resource gathering
-│   │   │   ├── alliance_help_action.py      # Alliance help
-│   │   │   ├── daily_quest_action.py        # Daily quests
+│   │   │   ├── gather_gem_action.py         # Gem gathering
 │   │   │   ├── scout_action.py              # Scouting
+│   │   │   ├── scout_cave_high_action.py    # High-level cave scouting
+│   │   │   ├── scout_cave_low_action.py     # Low-level cave scouting
 │   │   │   ├── train_troops_action.py       # Training troops
-│   │   │   └── action_factory.py            # Action registry & factory
+│   │   │   ├── alliance_help_action.py      # Alliance help
+│   │   │   ├── villager_help_action.py      # Villager help
+│   │   │   ├── rally_fort_action.py         # Rally barbarian forts
+│   │   │   ├── barbarian_attack_action.py   # Attack barbarians
+│   │   │   └── reconnect_action.py          # Handle disconnect
 │   │   │
-│   │   ├── 📁 emulator/                      # Emulator management
+│   │   ├── 📁 pc_controller/                 # Windows PC integration
 │   │   │   ├── __init__.py
-│   │   │   ├── adb_client.py                # ADB wrapper
-│   │   │   ├── scrcpy_client.py             # Scrcpy streaming
-│   │   │   ├── emulator_manager.py          # LDPlayer/MEmu control
-│   │   │   ├── device_profile.py            # Device fingerprint spoofing
-│   │   │   └── emulator_config.py           # Emulator settings
+│   │   │   ├── window_manager.py            # Find/activate game window
+│   │   │   ├── window_capture.py            # Screenshot via PIL
+│   │   │   └── pc_input.py                  # Mouse/keyboard via pyautogui
 │   │   │
-│   │   ├── 📁 input/                         # Input execution
-│   │   │   ├── __init__.py
-│   │   │   ├── adb_input.py                 # adb shell input tap/swipe
-│   │   │   ├── input_queue.py               # Action queue with timestamps
-│   │   │   ├── input_verifier.py            # Feedback loop: verify execution
-│   │   │   └── input_logger.py              # Input telemetry logging
-│   │   │
-│   │   ├── 📁 telemetry/                     # Data collection & logging
-│   │   │   ├── __init__.py
-│   │   │   ├── telemetry_collector.py       # Collect bot metrics
-│   │   │   ├── human_recorder.py            # Record human gameplay
-│   │   │   ├── session_logger.py            # Per-session log
-│   │   │   └── analytics_exporter.py        # Export for analysis
-│   │   │
-│   │   ├── 📁 utils/                         # Utilities
+│   │   ├── 📁 utils/                         # Shared utilities
 │   │   │   ├── __init__.py
 │   │   │   ├── logger.py                    # Structured logging (loguru)
-│   │   │   ├── retry_policy.py              # Exponential backoff + jitter
-│   │   │   ├── stuck_detector.py            # Stuck detection & recovery
-│   │   │   ├── image_utils.py               # Image I/O, conversion
-│   │   │   └── math_utils.py              # Gaussian, log-normal sampling
+│   │   │   ├── math_utils.py                # Gaussian, log-normal sampling
+│   │   │   └── map_navigation.py            # City/world navigation mixin
 │   │   │
 │   │   └── main.py                           # Entry point
 │   │
@@ -92,7 +72,7 @@ rok-bot-engine/
 │   │   │   ├── yolo_export.py                # Export to ONNX/CoreML
 │   │   │   └── yolo_evaluate.py              # mAP, precision, recall
 │   │   ├── 📁 ocr/
-│   │   │   ├── ocr_train.py                  # PaddleOCR fine-tuning
+│   │   │   ├── ocr_train.py                  # Tesseract fine-tuning
 │   │   │   └── ocr_evaluate.py               # Accuracy evaluation
 │   │   └── requirements.txt
 │   │
@@ -107,11 +87,9 @@ rok-bot-engine/
 │
 ├── 📁 config/
 │   ├── bot.yaml                              # Main bot configuration
-│   ├── emulator.yaml                         # Emulator settings
-│   ├── vision.yaml                           # YOLO / OCR / Template params
 │   ├── humanization.yaml                     # Humanization parameters
 │   ├── actions.yaml                          # Action definitions & priorities
-│   └── templates_meta.yaml                   # Template metadata
+│   └── combos.yaml                           # User-defined action sequences
 │
 ├── 📁 models/
 │   ├── 📁 yolo/
@@ -119,7 +97,7 @@ rok-bot-engine/
 │   │   ├── rok_ui_v8.onnx                    # ONNX export for inference
 │   │   └── labels.yaml                       # Class names & IDs
 │   ├── 📁 ocr/
-│   │   └── paddleocr_model/                  # Fine-tuned OCR model
+│   │   └── tesseract_model/                  # Fine-tuned OCR model (optional)
 │   └── 📁 templates/                         # Fallback template images
 │       ├── 📁 gather_flow/
 │       ├── 📁 error_states/
@@ -145,10 +123,7 @@ rok-bot-engine/
 │
 ├── 📁 scripts/
 │   ├── setup_env.sh                          # Setup Python + Rust env
-│   ├── setup_adb.sh                          # ADB setup
 │   ├── start_bot.py                          # Start bot with config
-│   ├── record_human.py                       # Record human gameplay
-│   ├── train_yolo.py                         # Train YOLO model
 │   ├── fit_distributions.py                  # Fit human data to distributions
 │   └── compare_human_bot.py                  # Compare telemetry
 │

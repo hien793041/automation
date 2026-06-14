@@ -2,7 +2,7 @@
 
 > **Scope**: Tổng quan kiến trúc, tính năng chính, và đánh giá chất lượng code hiện tại.  
 > **Updated**: 2026-06-09  
-> **Status**: Code đã work tốt, cần tối ưu & dọn dẹp dead code.
+> **Status**: Refactored and cleaned; full action-layer humanization integrated.
 
 ---
 
@@ -25,10 +25,7 @@ rok-bot/
 │   ├── bot.yaml               # Master config (actions, interval, thresholds)
 │   ├── actions.yaml           # Per-action flags & priorities
 │   ├── combos.yaml            # User-defined action sequences
-│   ├── humanization.yaml      # Timing/movement/fatigue distributions
-│   ├── vision.yaml            # YOLO & OCR settings
-│   ├── emulator.yaml          # Legacy ADB config (unused)
-│   └── *.yaml                 # Additional presets
+│   └── humanization.yaml      # Timing/movement/fatigue distributions
 │
 ├── src/
 │   ├── rokbot/                # Core bot package (~59 files)
@@ -56,39 +53,24 @@ rok-bot/
 │   │   │   ├── scout_cave_low_action.py
 │   │   │   └── villager_help_action.py
 │   │   ├── vision/            # Computer vision pipeline
-│   │   │   ├── yolo_detector.py
 │   │   │   ├── template_matcher.py
 │   │   │   ├── ocr_engine.py
-│   │   │   ├── window_capture.py      # PC screenshot (PrintWindow/BitBlt)
-│   │   │   ├── screen_capture.py      # ADB screencap (legacy/unused)
 │   │   │   ├── image_preprocessor.py
 │   │   │   └── region_of_interest.py
 │   │   ├── pc_controller/     # Windows PC integration
 │   │   │   ├── window_manager.py
-│   │   │   ├── window_capture.py      # Duplicate? See §4.A
+│   │   │   ├── window_capture.py
 │   │   │   └── pc_input.py
 │   │   ├── humanization/      # Anti-detection engine
-│   │   │   ├── timing_engine.py
-│   │   │   ├── movement_engine.py     # Bezier curves (unused)
-│   │   │   ├── session_manager.py     # Break scheduling (unused)
-│   │   │   ├── decision_engine.py     # Fatigue sim (unused)
-│   │   │   ├── error_simulator.py     # Misclick injection (unused)
-│   │   │   └── biometric_profile.py
-│   │   ├── input/             # Input telemetry (unused subsystem)
-│   │   │   ├── input_logger.py
-│   │   │   ├── input_queue.py
-│   │   │   └── input_verifier.py
-│   │   ├── telemetry/         # Runtime metrics
-│   │   │   ├── telemetry_collector.py
-│   │   │   ├── human_recorder.py
-│   │   │   ├── analytics_exporter.py
-│   │   │   └── session_logger.py
+│   │   │   ├── timing_engine.py       # Delay distributions
+│   │   │   ├── movement_engine.py     # Bezier mouse paths
+│   │   │   ├── session_manager.py     # Break scheduling
+│   │   │   ├── decision_engine.py     # Fatigue / distraction / frustration
+│   │   │   └── error_simulator.py     # Misclick injection
 │   │   └── utils/             # Shared utilities
 │   │       ├── logger.py
 │   │       ├── math_utils.py
-│   │       ├── retry_policy.py        # Defined but unused
-│   │       ├── stuck_detector.py      # Orphaned (StateContext thay thế)
-│   │       └── image_utils.py
+│   │       └── map_navigation.py      # City/world navigation mixin
 │   ├── training/              # YOLO & OCR training (standalone)
 │   │   ├── models/yolo_train.py
 │   │   └── ocr/ocr_train.py
@@ -151,12 +133,12 @@ rok-bot/
 - Ngườ dùng định nghĩa action chains trong `config/combos.yaml`.
 - `DynamicComboAction` tự động detect city/world state và switch map.
 
-### 3.6. Humanization Engine (Partial)
-- `TimingEngine`: Delay theo Gaussian/log-normal/exponential distributions (đã dùng trong ScoutAction, TrainTroopsAction).
-- `MovementEngine`: Quadratic Bezier + Fitts's Law (chưa integrate).
-- `SessionManager`: Lên lịch nghỉ giải lao (chưa dùng).
-- `DecisionEngine`: Mô phỏng fatigue, focus, distraction (chưa dùng).
-- `ErrorSimulator`: Inject misclick (chưa dùng).
+### 3.6. Humanization Engine
+- `TimingEngine`: Delay theo Gaussian/log-normal/exponential distributions (dùng trong `BaseAction`, `PCInput`, `StateMachine`).
+- `MovementEngine`: Quadratic Bezier + Fitts's Law (dùng trong `PCInput` cho mouse path).
+- `SessionManager`: Lên lịch nghỉ giải lao (dùng trong `StateMachine`).
+- `DecisionEngine`: Mô phỏng fatigue, focus, distraction (chia sẻ giữa `StateMachine`, `PCInput`, và mọi action).
+- `ErrorSimulator`: Inject misclick (dùng trong `PCInput`).
 
 ### 3.7. Vision Pipeline
 - **YOLOv8**: Primary detection với per-class confidence thresholds.
@@ -221,36 +203,37 @@ class MapNavigationMixin:
     def _detect_city_state(self, image) -> Literal["city", "world", "unknown"]: ...
 ```
 
-#### B. Dead Code — Cần loại bỏ hoặc integrate
+#### B. Dead Code — Đã dọn dẹp
 
-| Module/File | Tình trạng | Đề xuất |
-|-------------|-----------|---------|
-| `vision/screen_capture.py` (ADB) | Chưa bao giờ được instantiate trong main flow | **Xóa** hoặc chuyển sang `deprecated/` |
-| `pc_controller/window_capture.py` + `vision/window_capture.py` | Có 2 file cùng tên khác package, gây confusion | **Merge** vào `vision/window_capture.py` hoặc để ở `pc_controller/` |
-| `utils/stuck_detector.py` | `StateMachine` dùng `StateContext.is_stuck()` thay thế | **Xóa** |
-| `utils/retry_policy.py` | Defined nhưng không có caller | **Xóa** hoặc integrate vào `BaseAction` |
-| `input/` subsystem (3 files) | Không có caller, `PCInput` bypass hoàn toàn | **Xóa** hoặc integrate telemetry vào `PCInput` |
-| `humanization/movement_engine.py` | Chưa integrate, `PCInput` vẫn click instant | **Integrate** vào `PCInput.click()` hoặc **xóa** |
-| `humanization/decision_engine.py` | Không được instantiate | **Integrate** vào `StateMachine._tick()` hoặc **xóa** |
-| `humanization/session_manager.py` | Không được instantiate | **Integrate** vào `StateMachine.start()` hoặc **xóa** |
-| `humanization/error_simulator.py` | Không được instantiate | **Integrate** vào `PCInput` hoặc **xóa** |
-| `StateMachine._state_handlers` | Code comment: "legacy, can be removed once all actions are migrated" | **Xóa** nếu migration hoàn tất |
+| Module/File | Tình trạng |
+|-------------|-----------|
+| `vision/screen_capture.py` (ADB) | **Đã xóa** |
+| `vision/yolo_detector.py` | **Đã xóa** |
+| `utils/stuck_detector.py` | **Đã xóa** (thay thế bởi `StateContext.is_stuck()`) |
+| `utils/retry_policy.py` | **Đã xóa** |
+| `utils/image_utils.py` | **Đã xóa** |
+| `input/` subsystem (3 files) | **Đã xóa** |
+| `telemetry/` package (4 files) | **Đã xóa** |
+| `humanization/biometric_profile.py` | **Đã xóa** |
+| `scripts/record_human.py` | **Đã xóa** (phụ thuộc `ScreenCapture` đã xóa) |
+| `StateMachine._state_handlers` | **Đã xóa** |
+| `config/emulator.yaml`, `config/vision.yaml`, `config/actions_full.yaml`, `config/scout_only.yaml`, `config/templates_meta.yaml` | **Đã xóa** |
 
-#### C. Config Mismatch
+#### C. Config Mismatch (đã giải quyết)
 
 | Vấn đề | Chi tiết |
 |--------|----------|
-| `vision.yaml` ghi `ocr.engine: paddleocr` | Code dùng `pytesseract` |
-| `bot.yaml` có `ocr_lang: eng+vie` | `vision.yaml` có `ocr.lang: en` — giá trị từ `bot.yaml` win |
-| `pyproject.toml` thiếu PC deps | Thiếu `pytesseract`, `pyautogui`, `pywin32`; có `paddleocr` dư |
+| `vision.yaml` ghi `ocr.engine: paddleocr` | **Đã xóa** `config/vision.yaml`; code dùng `pytesseract` từ `bot.yaml` |
+| `bot.yaml` có `ocr_lang: eng+vie` | Giá trị từ `bot.yaml` được dùng |
+| `pyproject.toml` thiếu PC deps | Đã thêm `pytesseract`, `pyautogui`, `pywin32`; bỏ `paddleocr` dư |
 
-**Đề xuất**: Đồng bộ hóa `requirements.txt` và `pyproject.toml`. Cập nhật `vision.yaml` cho khớp runtime.
+**Trạng thái**: Các file config legacy đã được xóa; `config/humanization.yaml` được load runtime trong `main.py`.
 
-#### D. Emulator Config Bloat
+#### D. Emulator Config Bloat (đã giải quyết)
 - `EmulatorConfig` trong `BotConfig` và `config/emulator.yaml` là legacy từ phiên bản Android emulator.
 - Bot hiện tại là PC-only.
 
-**Đề xuất**: Xóa `EmulatorConfig`, `config/emulator.yaml`, và mọi ADB reference.
+**Trạng thái**: `EmulatorConfig`, `config/emulator.yaml`, và các ADB reference đã được xóa.
 
 ---
 
@@ -291,15 +274,17 @@ class MapNavigationMixin:
 Những thay đổi nhỏ, impact lớn, ít rủi ro:
 
 - [ ] **Extract `MapNavigationMixin`** — giảm ~150 dòng duplicate.
-- [ ] **Xóa `utils/stuck_detector.py`** — dead code.
-- [ ] **Xóa `utils/retry_policy.py`** — dead code.
-- [ ] **Xóa `input/` package** — dead subsystem.
-- [ ] **Xóa `vision/screen_capture.py`** — dead code.
-- [ ] **Xóa `_state_handlers` legacy** — dọn dẹp `StateMachine`.
-- [ ] **Xóa `DynamicComboAction` unreachable `raise`** — bug nhỏ.
-- [ ] **Fix `TrainTroopsAction` step logging** — polish.
-- [ ] **Đồng bộ `requirements.txt` ↔ `pyproject.toml`** — tránh lỗi cài đặt.
-- [ ] **Cập nhật `vision.yaml`** (`paddleocr` → `pytesseract`) — tránh confusion.
+- [x] **Xóa `utils/stuck_detector.py`** — dead code.
+- [x] **Xóa `utils/retry_policy.py`** — dead code.
+- [x] **Xóa `utils/image_utils.py`** — dead code.
+- [x] **Xóa `input/` package** — dead subsystem.
+- [x] **Xóa `telemetry/` package** — dead subsystem.
+- [x] **Xóa `vision/screen_capture.py`** — dead code.
+- [x] **Xóa `_state_handlers` legacy** — dọn dẹp `StateMachine`.
+- [x] **Xóa `DynamicComboAction` unreachable `raise`** — bug nhỏ.
+- [x] **Fix `TrainTroopsAction` step logging** — polish.
+- [x] **Đồng bộ `requirements.txt` ↔ `pyproject.toml`** — tránh lỗi cài đặt.
+- [x] **Xóa `config/vision.yaml`** (`paddleocr` → `pytesseract`) — tránh confusion.
 
 ---
 
@@ -307,16 +292,16 @@ Những thay đổi nhỏ, impact lớn, ít rủi ro:
 
 Đây là subsystem lớn nhất đang ở trạng thái **"đã viết nhưng chưa dùng"**:
 
-| Module | Đã viết | Đã dùng | Cần quyết định |
-|--------|---------|---------|----------------|
-| `TimingEngine` | ✅ | ✅ (partial) | Giữ nguyên |
-| `MovementEngine` | ✅ | ❌ | **Integrate** vào `PCInput` hoặc **xóa** |
-| `SessionManager` | ✅ | ❌ | **Integrate** vào main loop hoặc **xóa** |
-| `DecisionEngine` | ✅ | ❌ | **Integrate** vào `_tick()` hoặc **xóa** |
-| `ErrorSimulator` | ✅ | ❌ | **Integrate** hoặc **xóa** |
-| `BiometricProfile` | ✅ | ❌ (optional) | Giữ, cho phép user tắt |
+| Module | Đã viết | Đã dùng | Ghi chú |
+|--------|---------|---------|---------|
+| `TimingEngine` | ✅ | ✅ | Dùng trong `BaseAction`, `PCInput`, `StateMachine` |
+| `MovementEngine` | ✅ | ✅ | Dùng trong `PCInput` cho mouse path |
+| `SessionManager` | ✅ | ✅ | Dùng trong `StateMachine` cho break scheduling |
+| `DecisionEngine` | ✅ | ✅ | Chia sẻ giữa `StateMachine`, `PCInput`, và mọi action |
+| `ErrorSimulator` | ✅ | ✅ | Dùng trong `PCInput` cho misclick injection |
+| `BiometricProfile` | ❌ | — | **Đã xóa**; profile được load qua JSON timing profile hoặc `config/humanization.yaml` |
 
-**Khuyến nghị**: Nếu anti-detection là ưu tiên → integrate trong 1 sprint. Nếu không → xóa toàn bộ humanization package để giảm maintenance burden. Đừng để code "treo" giữa chừng.
+**Trạng thái**: Toàn bộ humanization subsystem đã được integrate vào runtime.
 
 ---
 
@@ -329,7 +314,7 @@ Những thay đổi nhỏ, impact lớn, ít rủi ro:
 | Actions implemented | 11 built-in + dynamic combos |
 | Vision backends | YOLOv8, OpenCV, Tesseract |
 | Test coverage | ~6-8 assertions (cần mở rộng) |
-| Dead / orphan modules | ~8 files |
+| Dead / orphan modules | ~0 (cleanup complete) |
 | Duplicate helpers | ~3 functions × 4-6 files |
 
 ---
@@ -345,18 +330,25 @@ Những thay đổi nhỏ, impact lớn, ít rủi ro:
   - `StateMachine` giờ có `SessionManager` (break scheduling, active-hour checks) và `DecisionEngine` (fatigue, distraction, delay injection).
 - ✅ **Xóa dead code**:
   - `src/rokbot/input/` package (3 files)
+  - `src/rokbot/telemetry/` package (4 files)
   - `src/rokbot/utils/stuck_detector.py`
   - `src/rokbot/utils/retry_policy.py`
+  - `src/rokbot/utils/image_utils.py`
   - `src/rokbot/vision/screen_capture.py` (ADB legacy)
+  - `src/rokbot/vision/yolo_detector.py`
+  - `src/rokbot/humanization/biometric_profile.py`
+  - `scripts/record_human.py`
   - Legacy `_state_handlers` trong `StateMachine`
+  - `config/emulator.yaml`, `config/vision.yaml`, `config/actions_full.yaml`, `config/scout_only.yaml`, `config/templates_meta.yaml`
 - ✅ **Fix bugs nhỏ**:
   - Xóa unreachable `raise` trong `DynamicComboAction.execute()`
   - Fix `TrainTroopsAction` step logging (consistent 1/5 → 5/5)
   - Fix `MovementEngine` jitter — giữ nguyên điểm đầu/cuối
   - Fix `StateMachine` initial state (`UNKNOWN` ngay sau init)
 - ✅ **Đồng bộ config**:
-  - `vision.yaml`: `paddleocr` → `pytesseract`, `lang: en` → `eng+vie`
   - `pyproject.toml`: thêm `pytesseract`, `pyautogui`, `pywin32`; bỏ `paddleocr`, `paddlepaddle`
+  - Xóa `config/vision.yaml`, `config/emulator.yaml`, và các config preset không dùng
+  - `main.py` load `config/humanization.yaml` runtime và merge vào `HumanizationConfig`
 
 **Kết luận**: Codebase đã được dọn dẹp đáng kể. Dead code được loại bỏ, humanization được integrate đầy đủ, và code duplication giảm ~150 dòng. Tất cả tests pass.
 
@@ -383,7 +375,35 @@ Những thay đổi nhỏ, impact lớn, ít rủi ro:
   - `scout`, `train_troops`, `rally_fort`
   - `scout_cave_high`, `scout_cave_low`
   - `alliance_help`, `villager_help`, `reconnect`, `dynamic_combo`
+- ✅ **Remove unused methods**: `BaseAction.decision_delay`, `PCInput.key_home`, `ErrorSimulator.maybe_wrong_button`, `TimingEngine.decision_delay`, `SessionManager.sample_session_length_hours`
 - ✅ **Remove duplicate `TimingEngine` / `_human_delay()`** from `BarbarianAttackAction`, `ScoutAction`, `TrainTroopsAction`.
 - ✅ **Update docs**: `docs/HUMANIZATION_ENGINE.md` now documents BaseAction integration and action-layer coverage.
 
 **Kết luận**: Every bot action now samples delays from fitted distributions and reports success/error to a shared cognitive model, making behavior significantly harder to distinguish from a real player. All existing tests pass.
+
+---
+
+## 11. Changelog (2026-06-14) — Input layer & config hardening
+
+### Đã thực hiện
+- ✅ **Fix runtime bug**: `resource_name` → `chosen_name` typo in `gather_action.py`.
+- ✅ **Load `config/humanization.yaml` at runtime** (`src/rokbot/main.py`):
+  - Merge `timing`, `movement`, `session` blocks into `HumanizationConfig`.
+  - `TimingEngine` now uses configured distributions when no JSON profile is provided.
+- ✅ **Expand `HumanizationConfig`** (`src/rokbot/core/config.py`) with `timing`, `movement`, `session` fields.
+- ✅ **Harden `PCInput`** (`src/rokbot/pc_controller/pc_input.py`):
+  - Activate game window before every input method (`tap`, `swipe`, `scroll`, `type_text`, `press_key`, `hold_key`, `hold_key_native`, `hold_click_at`, `move_to_safe_zone`).
+  - Set `pyautogui.PAUSE = 0` and rely entirely on `TimingEngine`.
+  - `tap()` now moves the cursor along a Bezier path generated by `MovementEngine`.
+  - Add `hold_click_at()` humanized helper used by `GatherGemAction`.
+  - Humanize `hold_key` / `hold_key_native` with reaction delays, key-up safety, and fatigue-based duration jitter.
+  - Humanize `move_to_safe_zone()` with a short Bezier path.
+- ✅ **Humanize `StateMachine._dismiss_overlays()`** — overlay close delay now samples from `click_interval`.
+- ✅ **Read `max_troops` from `config/actions.yaml`** in `GatherAction`, `GatherGemAction`, `RallyFortAction` via new `BaseAction.get_action_config()` helper.
+- ✅ **Fix `GatherGemAction` hold-click** — remove direct `pyautogui`/`time.sleep` code; use centralized `PCInput.hold_click_at()` and randomized click targets.
+- ✅ **Fix `ScoutCaveLowAction` step numbering** (`Step 2/6` → `Step 2/7`, etc.).
+- ✅ **Update `config/actions.yaml`**: add `gather_gem`, `scout_cave_high`, `scout_cave_low`, `barbarian_attack` with `max_troops` defaults.
+- ✅ **Migrate `pyproject.toml` linter config** từ `[tool.ruff]` sang `[tool.ruff.lint]`.
+- ✅ **Clean lint**: `ruff check .` pass.
+
+**Kết luận**: Input layer now consistently focuses the game window and moves the mouse like a human. Config files are actually loaded and used. All existing tests pass.

@@ -86,3 +86,25 @@ class WindowManager:
             return None
         left, top, right, bottom = rect
         return right - left, bottom - top
+
+    def activate_window(self) -> bool:
+        """Bring the game window to the foreground and return True on success.
+
+        This is useful before sending hotkeys so the input reaches the game
+        instead of whatever window is currently focused.
+        """
+        if not self.is_window_valid():
+            return False
+        try:
+            # win32gui.SetForegroundWindow fails if the calling thread is not
+            # foreground; use force=true via ShowWindow + SetForegroundWindow.
+            import win32con
+
+            hwnd = self.hwnd
+            if win32gui.IsIconic(hwnd):
+                win32gui.ShowWindow(hwnd, win32con.SW_RESTORE)
+            win32gui.SetForegroundWindow(hwnd)
+            return True
+        except Exception as e:
+            logger.warning(f"Failed to activate game window: {e}")
+            return False

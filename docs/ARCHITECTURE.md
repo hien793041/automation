@@ -2,24 +2,23 @@
 
 ## Layers
 
-1. **Vision Layer**: YOLOv8 + PaddleOCR + OpenCV template fallback
+1. **Vision Layer**: OpenCV template matching + Tesseract OCR
 2. **Humanization Layer**: Timing, movement, decision, session engines
 3. **State Machine Layer**: Orchestration, context, transitions, recovery
 4. **Action Layer**: Game-specific actions with factory pattern
-5. **Emulator Layer**: ADB / scrcpy abstraction
-6. **Telemetry Layer**: Recording, logging, analytics
+5. **PC Controller Layer**: `win32gui` + `pyautogui` window/input interaction
 
 ## Data Flow
 
 ```
-Screenshot -> Vision Pipeline -> State Inference -> Humanized Input -> ADB -> Emulator
+Screenshot -> Vision Pipeline -> State Inference -> Humanized Input -> PC game window
                    |                                    |
                    v                                    v
-            Confidence Calibrator                 Telemetry Log
+            Template Matcher                     Telemetry Log (optional)
 ```
 
 ## Design Principles
 
 - Modularity: Easy to swap vision or humanization components
 - Testability: Statistical tests for realism
-- Observability: Full telemetry per session
+- Observability: Logging per session via `loguru`

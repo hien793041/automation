@@ -57,7 +57,6 @@ class WindowCapture:
                 saveDC.BitBlt((0, 0), (width, height), mfcDC, (0, 0), 13369376)  # SRCCOPY
 
             # Convert bitmap to numpy array
-            bmpinfo = saveBitMap.GetInfo()
             bmpstr = saveBitMap.GetBitmapBits(True)
             image = np.frombuffer(bmpstr, dtype=np.uint8)
             image.shape = (height, width, 4)  # BGRA

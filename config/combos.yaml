@@ -10,7 +10,7 @@ combos:
     - gather
     - train_troops
     # - rally_fort
-    - barbarian_attack
+    # - barbarian_attack
   my_combo2:
     - reconnect
     - alliance_help
@@ -26,5 +26,4 @@ combos:
   my_combo4:
     - gather_gem
   my_combo5:
-    - barbarian_attack
-    - alliance_help
+    - train_troops

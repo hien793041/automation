@@ -7,7 +7,6 @@ from the city center. Distance is read via OCR around the city_center icon.
 
 import random
 import re
-import time
 from pathlib import Path
 from typing import TYPE_CHECKING, List, Optional, Tuple
 
@@ -16,9 +15,9 @@ from loguru import logger
 
 from rokbot.actions.base_action import BaseAction
 from rokbot.core.config import BotConfig
-from rokbot.vision.template_matcher import TemplateMatcher
-from rokbot.vision.ocr_engine import OCREngine
 from rokbot.utils.map_navigation import MapNavigationMixin
+from rokbot.vision.ocr_engine import OCREngine
+from rokbot.vision.template_matcher import TemplateMatcher
 
 if TYPE_CHECKING:
     from rokbot.core.state_machine import StateMachine
@@ -125,6 +124,7 @@ class GatherGemAction(BaseAction, MapNavigationMixin):
 
     def __init__(self, config: BotConfig, state_machine: Optional["StateMachine"] = None):
         super().__init__(config, state_machine)
+        self.MAX_ACTIVE_TROOPS = self.get_action_config("max_troops", 4)
         self._matcher = TemplateMatcher(
             templates_dir=self.TEMPLATES_DIR,
             threshold=0.75,
@@ -142,28 +142,6 @@ class GatherGemAction(BaseAction, MapNavigationMixin):
     # ------------------------------------------------------------------ #
     # Helpers kept from original file
     # ------------------------------------------------------------------ #
-
-    def _hold_click_at(self, x: int, y: int, duration: float) -> None:
-        """Hold mouse click at window-relative coordinates."""
-        import pyautogui
-
-        rect = self.state_machine.pc_input.window_manager.get_client_rect()
-        if rect is None:
-            logger.error("[GatherGem] Cannot hold click: game window not found")
-            return
-        left, top, _, _ = rect
-        abs_x = left + x
-        abs_y = top + y
-        pyautogui.moveTo(abs_x, abs_y, duration=0.2)
-        pyautogui.mouseDown()
-        try:
-            time.sleep(duration)
-        finally:
-            pyautogui.mouseUp()
-        logger.info(
-            f"[GatherGem] Held click at window ({x}, {y}) -> screen ({abs_x}, {abs_y}) "
-            f"for {duration:.2f}s"
-        )
 
     def _find_gems(self, image: np.ndarray) -> List:
         """Search for any gem_available template within the central map area."""
@@ -282,7 +260,7 @@ class GatherGemAction(BaseAction, MapNavigationMixin):
         ex1, ey1, ex2, ey2 = enter_btn.bbox
         abs_ex = roi_x1 + (ex1 + ex2) // 2
         abs_ey = roi_y1 + (ey1 + ey2) // 2
-        self._hold_click_at(abs_ex, abs_ey, 3.0)
+        self.state_machine.pc_input.hold_click_at(abs_ex, abs_ey, 3.0)
 
         self.human_delay("reaction_time", fallback_seconds=0.5)
         image = self.state_machine.screen_capture.capture()
@@ -297,16 +275,9 @@ class GatherGemAction(BaseAction, MapNavigationMixin):
             return False
         resource_btn = max(resource_matches, key=lambda m: m.confidence)
         rx, ry = self.random_point_in_bbox(resource_btn.bbox, jitter_sigma=1.0, edge_margin=2)
-        import pyautogui
 
-        rect = self.state_machine.pc_input.window_manager.get_client_rect()
-        if rect:
-            left, top, _, _ = rect
-            pyautogui.moveTo(left + rx, top + ry, duration=0)
-        self.human_delay("menu_wait", fallback_seconds=1.5)
-
-        bx1, by1, _, _ = resource_btn.bbox
-        self.state_machine.pc_input.tap(bx1, by1)
+        # Use the centralized humanized hold-click helper instead of direct pyautogui.
+        self.state_machine.pc_input.hold_click_at(rx, ry, 3.0)
         return True
 
     def _count_active_troops(self, image: np.ndarray) -> int:
@@ -446,8 +417,14 @@ class GatherGemAction(BaseAction, MapNavigationMixin):
                 ix1, iy1, ix2, iy2 = in_btn.bbox
                 cx = roi_x1 + (ix1 + ix2) // 2
                 cy = roi_y1 + (iy1 + iy2) // 2
-                logger.info(f"[GatherGem] In city — switching to world at ({cx}, {cy})")
-                self.state_machine.pc_input.tap(cx, cy)
+
+                # Humanization: randomly use the Space hotkey instead of clicking.
+                if self._use_hotkey_for_city_toggle():
+                    logger.info("[GatherGem] In city — switching to world via Space hotkey")
+                    self.state_machine.pc_input.press_key("space")
+                else:
+                    logger.info(f"[GatherGem] In city — switching to world at ({cx}, {cy})")
+                    self.state_machine.pc_input.tap(cx, cy)
                 self.human_delay("transition_wait", fallback_seconds=2.0)
 
         # ---- 2. Reset to city center ----------------------------------

@@ -59,7 +59,7 @@ def load_config(path: Path, enabled_actions: list) -> BotConfig:
     with open(path, "r", encoding="utf-8") as f:
         data = yaml.safe_load(f)
 
-    # Merge actions.yaml for per-action priorities
+    # Merge actions.yaml for per-action priorities and per-action settings
     actions_path = Path("config/actions.yaml")
     if actions_path.exists():
         with open(actions_path, "r", encoding="utf-8") as f:
@@ -75,6 +75,19 @@ def load_config(path: Path, enabled_actions: list) -> BotConfig:
             data.setdefault("actions", {})
             data["actions"]["enabled_actions"] = enabled
             data["actions"]["priorities"] = priorities
+            # Store the full per-action config so actions can read their own settings.
+            data["actions"]["action_configs"] = actions_raw["actions"]
+
+    # Merge humanization.yaml (rich timing/movement/session distributions)
+    humanization_path = Path("config/humanization.yaml")
+    if humanization_path.exists():
+        with open(humanization_path, "r", encoding="utf-8") as f:
+            humanization_raw = yaml.safe_load(f)
+        if humanization_raw:
+            data.setdefault("humanization", {})
+            for key in ("timing", "movement", "session"):
+                if key in humanization_raw:
+                    data["humanization"][key] = humanization_raw[key]
 
     # Override with CLI-selected actions
     data.setdefault("actions", {})

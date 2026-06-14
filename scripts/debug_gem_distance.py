@@ -22,7 +22,6 @@ from rokbot.pc_controller.window_capture import WindowCapture
 from rokbot.pc_controller.window_manager import WindowManager
 from rokbot.vision.template_matcher import TemplateMatcher
 
-
 TEMPLATES_DIR = Path("data/templates/gathergem")
 EXPAND_MARGIN = 60  # px around city_center
 

@@ -11,21 +11,6 @@ class StuckError(BotException):
     pass
 
 
-class VisionError(BotException):
-    """Raised when vision pipeline fails to detect required elements."""
-    pass
-
-
-class InputError(BotException):
-    """Raised when input execution fails or cannot be verified."""
-    pass
-
-
-class ConfigError(BotException):
-    """Raised when configuration is invalid or missing."""
-    pass
-
-
 class RecoveryError(BotException):
     """Raised when error recovery fails after maximum retries."""
     pass

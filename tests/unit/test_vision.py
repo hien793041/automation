@@ -1,7 +1,6 @@
 """Unit tests for vision pipeline."""
 
 import numpy as np
-import pytest
 
 from rokbot.vision.image_preprocessor import ImagePreprocessor
 from rokbot.vision.region_of_interest import ROIManager

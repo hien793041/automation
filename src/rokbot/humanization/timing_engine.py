@@ -1,23 +1,28 @@
 """Distribution-based timing engine for human-like delays."""
 
 import json
-import random
 from pathlib import Path
-from typing import Dict, Optional
+from typing import Any, Dict, Optional
 
-import numpy as np
 from loguru import logger
 
-from rokbot.utils.math_utils import sample_gaussian, sample_log_normal, sample_exponential
+from rokbot.utils.math_utils import sample_exponential, sample_gaussian, sample_log_normal
 
 
 class TimingEngine:
     """Samples delays from fitted human timing distributions."""
 
-    def __init__(self, profile_path: Optional[Path] = None):
+    def __init__(
+        self,
+        profile_path: Optional[Path] = None,
+        distributions: Optional[Dict[str, Dict[str, Any]]] = None,
+    ):
         self._distributions: Dict[str, dict] = {}
         if profile_path and profile_path.exists():
             self.load_profile(profile_path)
+        elif distributions:
+            self._distributions = dict(distributions)
+            logger.debug(f"Loaded {len(self._distributions)} timing distributions from config")
         else:
             self._set_defaults()
 
@@ -36,7 +41,12 @@ class TimingEngine:
     def load_profile(self, path: Path) -> None:
         """Load fitted distributions from JSON."""
         with open(path, "r", encoding="utf-8") as f:
-            self._distributions = json.load(f)
+            data = json.load(f)
+        # Accept either a flat dict of distributions or a nested {"timing": {...}} object.
+        if isinstance(data, dict) and "timing" in data:
+            self._distributions = data["timing"]
+        else:
+            self._distributions = data
         logger.info(f"Loaded timing profile from {path}")
 
     def sample(self, distribution_name: str) -> float:
@@ -65,6 +75,3 @@ class TimingEngine:
         """Sample inter-click delay in ms."""
         return self.sample("click_interval")
 
-    def decision_delay(self) -> float:
-        """Sample decision delay in ms."""
-        return self.sample("decision_time")

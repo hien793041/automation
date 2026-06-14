@@ -1,21 +1,10 @@
 # Data Collection
 
-## Human Recorder
-
-Records:
-- Touch events: x, y, pressure, action, timestamp
-- Timing events: event_type, duration_ms, context
-- Screenshots: timed captures
-
-## Usage
-
-```bash
-python scripts/record_human.py --player-id player_001
-```
+> Note: The `scripts/record_human.py` recorder and `rokbot/telemetry/` package have been removed. Humanization parameters are now configured directly in `config/humanization.yaml` or loaded from an optional JSON timing profile.
 
 ## Distribution Fitting
 
-After recording, fit distributions:
+If you have recorded timing data, fit distributions with:
 
 ```bash
 python scripts/fit_distributions.py --input-dir data/human_recordings
@@ -32,3 +21,7 @@ data/human_recordings/
       timing_data.jsonl
       session_metadata.json
 ```
+
+## Bot Telemetry
+
+Runtime logs are written to `data/bot_telemetry/` via `loguru`. No separate telemetry collector is currently active.

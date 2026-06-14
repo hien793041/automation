@@ -4,7 +4,11 @@ actions:
     enabled: true
     priority: 1
     timeout_seconds: 30.0
-    max_troops: 3
+  gather_gem:
+    enabled: false
+    priority: 1
+    timeout_seconds: 120.0
+    max_troops: 4
   alliance_help:
     enabled: false
     priority: 2
@@ -17,7 +21,14 @@ actions:
     enabled: false
     priority: 4
     timeout_seconds: 15.0
-
+  scout_cave_high:
+    enabled: false
+    priority: 3
+    timeout_seconds: 60.0
+  scout_cave_low:
+    enabled: false
+    priority: 3
+    timeout_seconds: 60.0
   villager_help:
     enabled: true
     priority: 2
@@ -26,6 +37,11 @@ actions:
     enabled: true
     priority: 2
     timeout_seconds: 60.0
+    max_troops: 4
+  barbarian_attack:
+    enabled: false
+    priority: 2
+    timeout_seconds: 45.0
   reconnect:
     enabled: false
     priority: 0

@@ -1,6 +1,5 @@
 """Gather action for collecting resources on the world map."""
 
-import random
 from pathlib import Path
 from typing import TYPE_CHECKING, Optional, Tuple
 
@@ -28,11 +27,13 @@ class GatherAction(BaseAction, MapNavigationMixin):
     RESOURCE_ICONS = ["corn_icon", "wood_icon", "stone_icon"]
 
     # Stop gathering when this many troops are already active
-    MAX_ACTIVE_TROOPS = 3
+    MAX_ACTIVE_TROOPS = 4
     TROOP_STATUS_TEMPLATES = ["gathering", "backing", "moving", "building", "attacking", "attacking1"]
 
     def __init__(self, config: BotConfig, state_machine: Optional["StateMachine"] = None):
         super().__init__(config, state_machine)
+        # MAX_ACTIVE_TROOPS is intentionally hardcoded to avoid confusion with
+        # config overrides. Adjust the class constant above if needed.
         self._matcher = TemplateMatcher(
             templates_dir=self.TEMPLATES_DIR,
             threshold=0.75,
@@ -170,30 +171,49 @@ class GatherAction(BaseAction, MapNavigationMixin):
         if resource_image is None:
             return False
 
-        # Pick resource randomly (corn or stone)
-        resource_match = None
-        primary_name = random.choice(self.RESOURCE_ICONS)
-
-        res_matches = self._matcher.match(resource_image, template_name=primary_name, threshold=0.75)
-        if res_matches:
-            resource_match = max(res_matches, key=lambda m: m.confidence)
-            resource_name = primary_name
-            logger.info(f"[Gather] Step 2/6: Found '{primary_name}' conf={resource_match.confidence:.2f}")
-        else:
-            # Fallback to the other resource type
-            fallback_name = next(r for r in self.RESOURCE_ICONS if r != primary_name)
-            res_matches = self._matcher.match(resource_image, template_name=fallback_name, threshold=0.75)
+        # Find all visible resource types and pick one.
+        # Humanization: occasionally change mind and pick the second-best option
+        # instead of the highest-confidence one, simulating a player hesitating.
+        available_resources = []
+        for name in self.RESOURCE_ICONS:
+            res_matches = self._matcher.match(resource_image, template_name=name, threshold=0.75)
             if res_matches:
-                resource_match = max(res_matches, key=lambda m: m.confidence)
-                resource_name = fallback_name
-                logger.info(f"[Gather] Step 2/6: Found fallback '{fallback_name}' conf={resource_match.confidence:.2f}")
+                best = max(res_matches, key=lambda m: m.confidence)
+                available_resources.append((name, best))
+                logger.debug(f"[Gather] Found '{name}' conf={best.confidence:.2f} at {best.center}")
 
-        if resource_match is None:
+        if not available_resources:
             logger.info("[Gather] No resource icon found")
             return False
 
+        # Sort by confidence so the first entry is the "obvious" choice.
+        available_resources.sort(key=lambda x: x[1].confidence, reverse=True)
+        chosen_name, resource_match = available_resources[0]
+
+        # Change-of-mind: if multiple resources are visible, sometimes switch to
+        # another one. Add a short hesitation pause before deciding.
+        if len(available_resources) > 1:
+            if self._decision is not None and self._decision.change_mind():
+                self.human_delay("decision_time", fallback_seconds=0.6)
+                alt_name, alt_match = available_resources[1]
+                chosen_name = alt_name
+                resource_match = alt_match
+                logger.info(
+                    f"[Gather] Step 2/6: Change of mind — switching from "
+                    f"'{available_resources[0][0]}' to '{chosen_name}' "
+                    f"conf={resource_match.confidence:.2f}"
+                )
+            else:
+                logger.info(
+                    f"[Gather] Step 2/6: Found '{chosen_name}' conf={resource_match.confidence:.2f}"
+                )
+        else:
+            logger.info(
+                f"[Gather] Step 2/6: Found '{chosen_name}' conf={resource_match.confidence:.2f}"
+            )
+
         rx, ry = self.random_point_in_bbox(resource_match.bbox, jitter_sigma=1.0, edge_margin=2)
-        logger.info(f"[Gather] Tapping '{resource_name}' at ({rx}, {ry})")
+        logger.info(f"[Gather] Tapping '{chosen_name}' at ({rx}, {ry})")
         self.state_machine.pc_input.tap(rx, ry)
         self.human_delay("menu_wait", fallback_seconds=1.5)
 

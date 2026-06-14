@@ -3,8 +3,7 @@
 import math
 import random
 from dataclasses import dataclass, field
-from datetime import datetime, timedelta
-from typing import Optional
+from datetime import datetime
 
 from loguru import logger
 

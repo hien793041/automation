@@ -64,14 +64,6 @@ class SessionManager:
 
         return random.random() < 0.30
 
-    def sample_session_length_hours(self) -> float:
-        """Sample session length from bimodal distribution."""
-        if random.random() < self.short_session_weight:
-            length = np.random.normal(self.short_session_mu, self.short_session_sigma)
-        else:
-            length = np.random.normal(self.long_session_mu, self.long_session_sigma)
-        return max(0.25, length)
-
     def sample_break_minutes(self) -> float:
         """Sample break duration from exponential + minimum."""
         exp_minutes = np.random.exponential(1.0 / self.break_lambda_hours * 60)

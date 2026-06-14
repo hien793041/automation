@@ -93,10 +93,6 @@ class BaseAction(ABC):
         """Short interval after an action completes."""
         self.human_delay("click_interval", fallback_seconds=0.5)
 
-    def decision_delay(self) -> None:
-        """Longer pause for decision-like moments (e.g. reading a menu)."""
-        self.human_delay("decision_time", fallback_seconds=0.8)
-
     def random_point_in_bbox(
         self,
         bbox: Tuple[int, int, int, int],
@@ -172,6 +168,29 @@ class BaseAction(ABC):
         """Report an error to the cognitive model (increases frustration)."""
         if self._decision is not None:
             self._decision.record_error()
+
+    def get_action_config(self, key: str, default=None):
+        """Return a per-action setting from config/actions.yaml if present."""
+        if self.config is None or self.config.actions is None:
+            return default
+        # Common action name mapping from class name.
+        name_map = {
+            "GatherAction": "gather",
+            "GatherGemAction": "gather_gem",
+            "RallyFortAction": "rally_fort",
+            "ScoutAction": "scout",
+            "TrainTroopsAction": "train_troops",
+            "BarbarianAttackAction": "barbarian_attack",
+            "ScoutCaveHighAction": "scout_cave_high",
+            "ScoutCaveLowAction": "scout_cave_low",
+            "AllianceHelpAction": "alliance_help",
+            "VillagerHelpAction": "villager_help",
+            "ReconnectAction": "reconnect",
+            "DynamicComboAction": "dynamic_combo",
+        }
+        action_name = name_map.get(self.name, self.name)
+        action_cfg = self.config.actions.action_configs.get(action_name, {})
+        return action_cfg.get(key, default)
 
     # ------------------------------------------------------------------
     # Abstract interface

@@ -1,11 +1,9 @@
 """Unit tests for humanization engine."""
 
-import numpy as np
-import pytest
 
-from rokbot.humanization.timing_engine import TimingEngine
-from rokbot.humanization.movement_engine import MovementEngine
 from rokbot.humanization.decision_engine import DecisionEngine
+from rokbot.humanization.movement_engine import MovementEngine
+from rokbot.humanization.timing_engine import TimingEngine
 
 
 def test_timing_engine_samples_positive():

@@ -4,8 +4,6 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from typing import List, Optional
 
-from rokbot.core.exceptions import RecoveryError
-
 
 @dataclass
 class StateRecord:
@@ -25,7 +23,6 @@ class TransitionRecord:
     to_state: str
     timestamp: datetime = field(default_factory=datetime.utcnow)
     success: bool = False
-    retry_count: int = 0
 
 
 class StateContext:
@@ -44,12 +41,6 @@ class StateContext:
         if not self._history:
             return None
         return self._history[-1].state
-
-    @property
-    def previous_state(self) -> Optional[str]:
-        if len(self._history) < 2:
-            return None
-        return self._history[-2].state
 
     def record_state(self, state: str, confidence: float = 0.0, detections: Optional[List[dict]] = None) -> None:
         """Record a new state observation."""
@@ -77,9 +68,6 @@ class StateContext:
         self._retry_counts[state] = self._retry_counts.get(state, 0) + 1
         return self._retry_counts[state]
 
-    def get_retry_count(self, state: str) -> int:
-        return self._retry_counts.get(state, 0)
-
     def time_in_current_state(self) -> float:
         """Return seconds spent in the current state."""
         if self._state_start_time is None:
@@ -90,17 +78,6 @@ class StateContext:
         """Check if bot has been in the same state too long."""
         return self.time_in_current_state() > threshold_seconds
 
-    def recent_states(self, n: int = 10) -> List[str]:
-        """Return last N state names."""
-        return [r.state for r in self._history[-n:]]
-
     def reset_stuck_timer(self) -> None:
         """Reset the stuck timer so idle periods don't trigger false positives."""
         self._state_start_time = datetime.utcnow()
-
-    def reset_retries(self, state: Optional[str] = None) -> None:
-        """Reset retry counts."""
-        if state is None:
-            self._retry_counts.clear()
-        else:
-            self._retry_counts[state] = 0

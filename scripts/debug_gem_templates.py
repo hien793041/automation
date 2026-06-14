@@ -19,13 +19,11 @@ sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 import math
 
 import cv2
-import numpy as np
 from loguru import logger
 
 from rokbot.pc_controller.window_capture import WindowCapture
 from rokbot.pc_controller.window_manager import WindowManager
 from rokbot.vision.template_matcher import TemplateMatcher
-
 
 TEMPLATES_DIR = Path("data/templates/gathergem")
 

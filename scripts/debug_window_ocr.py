@@ -15,7 +15,6 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
 import cv2
-import numpy as np
 from loguru import logger
 
 from rokbot.core.config import BotConfig

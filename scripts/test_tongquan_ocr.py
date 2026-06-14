@@ -10,9 +10,9 @@ sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 from loguru import logger
 
 from rokbot.core.config import BotConfig
+from rokbot.pc_controller.pc_input import PCInput
 from rokbot.pc_controller.window_capture import WindowCapture
 from rokbot.pc_controller.window_manager import WindowManager
-from rokbot.pc_controller.pc_input import PCInput
 from rokbot.vision.ocr_engine import OCREngine
 from rokbot.vision.template_matcher import TemplateMatcher
 

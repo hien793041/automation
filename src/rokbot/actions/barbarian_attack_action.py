@@ -8,8 +8,8 @@ from loguru import logger
 
 from rokbot.actions.base_action import BaseAction
 from rokbot.core.config import BotConfig
-from rokbot.vision.template_matcher import TemplateMatcher
 from rokbot.utils.map_navigation import MapNavigationMixin
+from rokbot.vision.template_matcher import TemplateMatcher
 
 if TYPE_CHECKING:
     from rokbot.core.state_machine import StateMachine
@@ -104,13 +104,11 @@ class BarbarianAttackAction(BaseAction, MapNavigationMixin):
             return False
 
         avail_found = False
-        avail_name = None
         for tpl in self.TROOP_AVAIL_TEMPLATES:
             avail_matches = self._matcher.match(image, template_name=tpl, threshold=0.80)
             if avail_matches:
                 avail_btn = max(avail_matches, key=lambda m: m.confidence)
                 avail_found = True
-                avail_name = tpl
                 logger.info(f"[Barbarian] Step 0/7: {tpl} confirmed conf={avail_btn.confidence:.2f}")
                 break
         if not avail_found:

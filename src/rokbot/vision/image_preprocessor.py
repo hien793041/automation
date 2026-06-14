@@ -4,7 +4,6 @@ from typing import Optional, Tuple
 
 import cv2
 import numpy as np
-from loguru import logger
 
 
 class ImagePreprocessor:
@@ -43,10 +42,10 @@ class ImagePreprocessor:
     @staticmethod
     def _enhance_contrast(image: np.ndarray) -> np.ndarray:
         lab = cv2.cvtColor(image, cv2.COLOR_BGR2LAB)
-        l, a, b = cv2.split(lab)
+        l_chan, a, b = cv2.split(lab)
         clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8))
-        l = clahe.apply(l)
-        enhanced = cv2.merge([l, a, b])
+        l_chan = clahe.apply(l_chan)
+        enhanced = cv2.merge([l_chan, a, b])
         return cv2.cvtColor(enhanced, cv2.COLOR_LAB2BGR)
 
     @staticmethod

@@ -23,10 +23,10 @@
 
 | # | Tính năng | File chính | Trạng thái | Việc cần làm chi tiết |
 |---|-----------|------------|------------|----------------------|
-| 2.1 | **YOLOv8 Detector** | `src/rokbot/vision/yolo_detector.py` | `[~]` | - ✅ Đã có class `YOLODetector`, load model, detect bbox<br>- ⚠️ Cần model `models/yolo/rok_ui_v8.pt` (hiện chưa có)<br>- Đảm bảo `ultralytics` đã install |
+| 2.1 | **Template Matching (primary)** | `src/rokbot/vision/template_matcher.py` | `[x]` | - ✅ OpenCV template matching là backend chính<br>- ✅ ROI + multi-scale support<br>- Templates lưu trong `data/templates/` |
 | 2.2 | **OCR Engine** | `src/rokbot/vision/ocr_engine.py` | `[x]` | - ✅ Đã chuyển sang Tesseract OCR (`pytesseract`)<br>- ✅ Hoạt động ổn định trên Windows, không lỗi backend<br>- Đọc text từ screenshot, trả về bbox + confidence |
 | 2.3 | **Template Fallback** | `src/rokbot/vision/template_matcher.py` | `[x]` | - ✅ OpenCV template matching trong ROI cụ thể<br>- ✅ Dùng khi YOLO + OCR đều fail (hiện tại là primary cho small UI)<br>- ✅ Templates lưu trong `data/templates/` |
-| 2.4 | **Confidence Calibration** | `src/rokbot/vision/confidence_calibrator.py` | `[~]` | - ✅ Đã có class<br>- Cần chạy trên validation set để update `DEFAULT_THRESHOLDS`<br>- Target: precision/recall tối ưu per class |
+| 2.4 | **Confidence Calibration** | — | `[x]` | - ❌ File `confidence_calibrator.py` đã xóa<br>- Thresholds được định nghĩa trực tiếp trong code/config |
 | 2.5 | **Vision Integration với State Machine** | `src/rokbot/core/state_machine.py` | `[ ]` | - Implement `_infer_next_state()`:<br>  1. Chụp screenshot<br>  2. Chạy YOLO detect<br>  3. (Optional) OCR verify<br>  4. Map detections → `BotState`<br>  5. Return next state |
 | 2.6 | **YOLO Model Preparation** | `models/yolo/` | `[ ]` | - Chuẩn bị hoặc download model `rok_ui_v8.pt`<br>- Export ONNX: `rok_ui_v8.onnx`<br>- Tạo `labels.yaml` mapping class IDs |
 
@@ -37,10 +37,10 @@
 | # | Tính năng | File chính | Trạng thái | Việc cần làm chi tiết |
 |---|-----------|------------|------------|----------------------|
 | 3.1 | **Timing Engine** | `src/rokbot/humanization/timing_engine.py` | `[ ]` | - Implement sampler từ phân phối:<br>  - Gaussian: reaction time, decision time<br>  - Log-normal: click intervals<br>  - Exponential: break durations<br>- Dùng params từ `config/bot.yaml` (`reaction_time_mu`, `click_interval_shape`, etc.) |
-| 3.2 | **Movement Engine** | `src/rokbot/humanization/movement_engine.py` | `[ ]` | - Quadratic Bezier curves với perpendicular control offset<br>- Fitts's Law cho movement duration<br>- Micro-jitter per point<br>- Tích hợp vào `ADBClient.tap()` / `swipe()` |
+| 3.2 | **Movement Engine** | `src/rokbot/humanization/movement_engine.py` | `[x]` | - ✅ Quadratic Bezier curves với perpendicular control offset<br>- ✅ Fitts's Law cho movement duration<br>- ✅ Micro-jitter per point<br>- ✅ Tích hợp vào `PCInput.tap()` / `swipe()` |
 | 3.3 | **Decision Engine** | `src/rokbot/humanization/decision_engine.py` | `[ ]` | - Fatigue model: sigmoid curve sau 2h<br>- Distraction probability ↑ theo fatigue<br>- Misclick rate (`base_misclick_rate`)<br>- Change-mind rate |
 | 3.4 | **Session Manager** | `src/rokbot/humanization/session_manager.py` | `[ ]` | - Schedule-aware activity probability<br>- Bimodal session lengths<br>- Poisson break intervals<br>- Tự động pause/resume bot theo schedule |
-| 3.5 | **Biometric Profile** | `src/rokbot/humanization/biometric_profile.py` | `[ ]` | - Tạo/lưu profile ổn định cho mỗi instance<br>- Profile chứa: timing distributions, movement jerk, personality traits<br>- Load từ `profile_path` nếu có, nếu không tạo mới |
+| 3.5 | **Biometric Profile** | — | `[x]` | - ❌ File `biometric_profile.py` đã xóa<br>- Profile được load từ `config/humanization.yaml` hoặc JSON timing profile |
 | 3.6 | **Error Simulator** | `src/rokbot/humanization/error_simulator.py` | `[ ]` | - Random misclick gần target (không phải hoàn toàn random)<br>- Occasional pause ("distracted")<br>- Double-tap nếu không thấy phản hồi |
 | 3.7 | **Validation** | Tests / Analytics | `[ ]` | - Timing: KS-test p > 0.05 so với human data<br>- Movement: DTW distance < threshold<br>- Session: Chi-square p > 0.05 |
 
@@ -53,7 +53,7 @@
 | 4.1 | **Window Manager** | `src/rokbot/pc_controller/window_manager.py` | `[x]` | - ✅ Tìm cửa sổ game bằng `win32gui.EnumWindows`<br>- ✅ Theo dõi window handle, lấy client rect<br>- Config `window_title` trong `config/bot.yaml` |
 | 4.2 | **Window Capture** | `src/rokbot/pc_controller/window_capture.py` | `[x]` | - ✅ Chụp screenshot bằng `PIL.ImageGrab.grab(bbox=...)`<br>- ✅ Trả về numpy array BGR (OpenCV format) |
 | 4.3 | **PC Input** | `src/rokbot/pc_controller/pc_input.py` | `[x]` | - ✅ Click chuột bằng `pyautogui.click()` (tọa độ tương đối cửa sổ)<br>- ✅ Swipe/drag, scroll, key press (ESC = back)<br>- FAILSAFE enabled (kéo chuột ra góc màn hình để dừng khẩn cấp) |
-| 4.4 | **Emulator Layer** | `src/rokbot/emulator/` | `[x]` | - ✅ Đã xóa toàn bộ (ADB, scrcpy, emulator_manager, adb_input)<br>- Không còn dependency với Android emulator |
+| 4.4 | **Emulator Layer** | — | `[x]` | - ✅ Đã xóa toàn bộ (ADB, scrcpy, emulator_manager, adb_input)<br>- Bot chỉ hỗ trợ PC client (Windows) |
 
 ---
 
@@ -61,7 +61,7 @@
 
 | # | Tính năng | File chính | Trạng thái | Việc cần làm chi tiết |
 |---|-----------|------------|------------|----------------------|
-| 5.1 | **Main Loop** | `src/rokbot/core/state_machine.py` | `[x]` | - ✅ Vòng lặp `_tick()` đang chạy<br>- ✅ StateMachine đã nhận `adb_client`, `screen_capture`, `ocr_engine`<br>- ✅ Tích hợp Action Factory vào `_tick()` (`_evaluate_and_execute_actions`)<br>- ✅ Actions được sort theo priority, chạy 1 action/tick |
+| 5.1 | **Main Loop** | `src/rokbot/core/state_machine.py` | `[x]` | - ✅ Vòng lặp `_tick()` đang chạy<br>- ✅ StateMachine đã nhận `pc_input`, `window_capture`, `ocr_engine`<br>- ✅ Tích hợp Action Factory vào `_tick()` (`_evaluate_and_execute_actions`)<br>- ✅ Actions được sort theo priority, chạy 1 action/tick |
 | 5.2 | **State Context** | `src/rokbot/core/state_context.py` | `[~]` | - ✅ Đã có tracking state, retry count, timestamps<br>- Có thể cần thêm: action history, screenshot history |
 | 5.3 | **Stuck Detection** | `src/rokbot/core/state_machine.py` | `[~]` | - ✅ `is_stuck()` theo `stuck_threshold_seconds` (60s)<br>- Có thể fine-tune threshold theo state |
 | 5.4 | **Recovery Sequence** | `src/rokbot/core/state_machine.py` | `[ ]` | - Implement `_enter_recovery()` đầy đủ:<br>  1. Press Back (1-3 lần)<br>  2. Wait 2-5s<br>  3. Press Home<br>  4. Relaunch game nếu cần<br>- Max retry: `max_retry_attempts` (default 3) |
@@ -74,10 +74,10 @@
 
 | # | Tính năng | File chính | Trạng thái | Việc cần làm chi tiết |
 |---|-----------|------------|------------|----------------------|
-| 6.1 | **Human Recorder** | `scripts/record_human.py` | `[ ]` | - Chạy script để ghi lại gameplay người thật<br>- Input: `--player-id player_001`<br>- Output: `data/human_recordings/player_001/session_*/`<br>- Ghi: touch events, timing data, screenshots |
+| 6.1 | **Human Recorder** | — | `[x]` | - ❌ `scripts/record_human.py` và `rokbot/telemetry/` đã xóa<br>- Humanization params cấu hình qua `config/humanization.yaml` |
 | 6.2 | **Distribution Fitting** | `scripts/fit_distributions.py` | `[ ]` | - Chạy sau khi có recordings<br>- Input: `data/human_recordings/`<br>- Fit: Gaussian, Log-normal, Exponential params<br>- Output: update `config/bot.yaml` hoặc profile |
-| 6.3 | **Session Logger** | `src/rokbot/telemetry/session_logger.py` | `[ ]` | - Log mọi session: state transitions, actions, errors<br>- Lưu vào `data/bot_telemetry/sessions/`<br>- Rotate logs theo ngày |
-| 6.4 | **Telemetry Collector** | `src/rokbot/telemetry/telemetry_collector.py` | `[ ]` | - Collect metrics: detection accuracy, action success rate, session length<br>- Export định kỳ |
+| 6.3 | **Session Logger** | — | `[x]` | - ❌ `src/rokbot/telemetry/` đã xóa<br>- Logging qua `loguru` vào `data/bot_telemetry/` |
+| 6.4 | **Telemetry Collector** | — | `[x]` | - ❌ `src/rokbot/telemetry/` đã xóa |
 | 6.5 | **Compare Human vs Bot** | `scripts/compare_human_bot.py` | `[ ]` | - Dùng sau khi bot chạy được<br>- So sánh phân phối timing, movement<br>- Validate humanization quality |
 
 ---
@@ -86,10 +86,10 @@
 
 | # | Tính năng | File chính | Trạng thái | Việc cần làm chi tiết |
 |---|-----------|------------|------------|----------------------|
-| 7.1 | **YOLOv8 Training** | `scripts/train_yolo.py` | `[ ]` | - Chuẩn bị dataset (LabelImg / Roboflow)<br>- Update `src/training/data/dataset.yaml`<br>- Train: `python scripts/train_yolo.py --epochs 100 --imgsz 640`<br>- Target: mAP > 0.95 |
-| 7.2 | **YOLO Evaluation** | `src/training/models/yolo_evaluate.py` | `[ ]` | - Evaluate trên held-out test set<br>- Tính per-class precision/recall<br>- Update thresholds trong `yolo_detector.py` |
-| 7.3 | **YOLO Export** | `src/training/models/yolo_export.py` | `[ ]` | - Export sang ONNX: `--format onnx`<br>- Lưu vào `models/yolo/rok_ui_v8.onnx` |
-| 7.4 | **OCR Training** | `src/training/ocr/ocr_train.py` | `[ ]` | - Fine-tune PaddleOCR cho font ROK-specific<br>- Target: accuracy > 98% |
+| 7.1 | **Template Library** | `data/templates/` | `[~]` | - Thu thập/cập nhật template cho UI elements<br>- Tổ chức theo flow (gather_flow, error_states, common_ui) |
+| 7.2 | **Template Evaluation** | — | `[ ]` | - Đo precision/recall của template matching trên screenshot samples<br>- Cập nhật thresholds trong code/config |
+| 7.3 | **OCR Training** | `src/training/ocr/ocr_train.py` | `[ ]` | - Fine-tune Tesseract cho font ROK-specific<br>- Target: accuracy > 98% |
+| 7.4 | **OCR Evaluation** | `src/training/ocr/ocr_evaluate.py` | `[ ]` | - Đánh giá OCR accuracy trên test set |
 | 7.5 | **Dataset Management** | `src/training/data/` | `[ ]` | - Tổ chức folder: train/val/test<br>- Đảm bảo balance class labels |
 
 ---
@@ -100,7 +100,7 @@
 |---|-----------|------------|------------|----------------------|
 | 8.1 | **Behavioral Biometrics** | Humanization Layer | `[ ]` | - Consistent profile across sessions<br>- Không thay đổi random mỗi action |
 | 8.2 | **Timing Randomization** | Timing Engine | `[ ]` | - Distribution-based (KHÔNG phải uniform random)<br>- Phải giống phân phối người thật |
-| 8.3 | **Emulator Fingerprint** | `src/rokbot/emulator/device_profile.py` | `[ ]` | - Spoof device fingerprint nếu cần<br>- Tránh dùng default emulator props |
+| 8.3 | **Emulator Fingerprint** | — | `[x]` | - ❌ Không áp dụng; bot chạy trên PC client Windows |
 | 8.4 | **Session Realism** | Session Manager | `[ ]` | - Không chạy 24/7 liên tục<br>- Realistic hours (evening heavy)<br>- Natural breaks |
 
 ---
@@ -136,12 +136,11 @@ Phase 2: Game Actions
 └── [x] 1.5 Reconnect (xử lý disconnect)
 
 Phase 3: Humanization
-├── [ ] 6.1 Record human + 6.2 Fit distributions
-├── [ ] 3.1 Timing Engine
-├── [ ] 3.2 Movement Engine
-├── [ ] 3.5 Biometric Profile
-├── [ ] 3.3 Decision Engine
-└── [ ] 3.4 Session Manager
+├── [x] 3.1 Timing Engine
+├── [x] 3.2 Movement Engine
+├── [x] 3.3 Decision Engine
+├── [x] 3.4 Session Manager
+└── [x] 3.6 Error Simulator
 
 Phase 4: Polish
 ├── [ ] 2.2 OCR Verification

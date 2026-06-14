@@ -4,7 +4,7 @@ import random
 import time
 from enum import Enum, auto
 from pathlib import Path
-from typing import Callable, Dict, List, Optional
+from typing import List, Optional
 
 import pyautogui
 from loguru import logger
@@ -13,9 +13,10 @@ from rokbot.actions.action_factory import ActionFactory
 from rokbot.core.config import BotConfig
 from rokbot.core.exceptions import RecoveryError, StuckError
 from rokbot.core.state_context import StateContext
-from rokbot.core.state_transitions import TransitionRegistry, TransitionRule
+from rokbot.core.state_transitions import TransitionRegistry
 from rokbot.humanization.decision_engine import DecisionEngine
 from rokbot.humanization.session_manager import SessionManager
+from rokbot.humanization.timing_engine import TimingEngine
 from rokbot.vision.template_matcher import TemplateMatcher
 
 
@@ -61,9 +62,14 @@ class StateMachine:
         self.context.record_state(BotState.UNKNOWN.name)
         self._session_manager: Optional[SessionManager] = None
         self._decision_engine: Optional[DecisionEngine] = None
+        self._timing: Optional[TimingEngine] = None
         self._capture_fail_count = 0
         self._max_capture_failures = 3
         if config.humanization.enabled:
+            self._timing = TimingEngine(
+                profile_path=config.humanization.profile_path,
+                distributions=config.humanization.timing,
+            )
             if config.humanization.schedule_enabled:
                 self._session_manager = SessionManager()
                 self._session_manager.start_session()
@@ -174,6 +180,8 @@ class StateMachine:
             if self._decision_engine.is_distracted():
                 delay = self._decision_engine.reaction_time_multiplier() * random.uniform(2, 5)
                 logger.debug(f"Decision engine: distracted — adding {delay:.1f}s delay")
+                if self._timing:
+                    delay = max(delay, self._timing.sample("decision_time") / 1000.0)
                 time.sleep(delay)
 
         # Determine next state (placeholder for vision integration)
@@ -227,7 +235,10 @@ class StateMachine:
                 logger.info(f"[StateMachine] Closing {label} at ({cx}, {cy}) conf={best.confidence:.2f}")
                 self.pc_input.move_to_safe_zone()
                 self.pc_input.tap(cx, cy)
-                time.sleep(random.uniform(0.5, 1.0))
+                if self._timing:
+                    time.sleep(max(0.05, self._timing.sample("click_interval") / 1000.0))
+                else:
+                    time.sleep(random.uniform(0.5, 1.0))
                 # Only dismiss one overlay per tick to avoid mis-clicks
                 break
         return True

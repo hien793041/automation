@@ -1,10 +1,9 @@
 """State transition rules and guards for ROK Bot Engine v2."""
 
 from dataclasses import dataclass
-from typing import Callable, Dict, List, Optional
+from typing import Callable, List, Optional
 
 from rokbot.core.state_context import StateContext
-
 
 TransitionGuard = Callable[[StateContext], bool]
 
@@ -137,15 +136,3 @@ class TransitionRegistry:
         """Add a transition rule."""
         self._rules.append(rule)
         self._rules.sort(key=lambda r: r.priority, reverse=True)
-
-    def get_valid_transitions(
-        self, context: StateContext, available_detections: List[str]
-    ) -> List[TransitionRule]:
-        """Return valid transitions sorted by priority."""
-        current = context.current_state or "UNKNOWN"
-        valid: List[TransitionRule] = []
-        for rule in self._rules:
-            if "*" in rule.from_states or current in rule.from_states:
-                if rule.guard is None or rule.guard(context):
-                    valid.append(rule)
-        return valid

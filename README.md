@@ -4,24 +4,21 @@
 
 ## Overview
 
-ROK Bot Engine v2 is a next-generation automation framework for Rise of Kingdoms, built with Python. It replaces v1's template-matching approach with a ML-powered vision pipeline (YOLOv8 + OCR) and a data-driven humanization engine that simulates real human behavioral distributions.
+ROK Bot Engine v2 is a next-generation automation framework for Rise of Kingdoms, built with Python. It runs against the **PC client** on Windows using computer vision (template matching + OCR) and a data-driven humanization engine that simulates real human behavioral distributions.
 
 ## Key Features
 
-- **Vision Pipeline**: Three-stage detection (YOLO -> OCR verification -> Template fallback)
+- **Vision Pipeline**: Template matching + OCR verification
 - **Humanization Engine**: Distribution-based timing, Bezier movement paths, cognitive state simulation
 - **State Machine**: Robust state tracking with stuck detection and recovery
 - **Anti-Detection**: Behavioral biometrics, consistent profiles, no process modification
-- **Telemetry**: Human gameplay recording and statistical validation
+- **PC Integration**: Direct interaction with the Windows game window via `win32gui` + `pyautogui`
 
 ## Quick Start
 
 ```bash
 # Setup environment
 make install-dev
-
-# Configure emulator ADB
-bash scripts/setup_adb.sh
 
 # Start bot
 make run
@@ -38,7 +35,7 @@ See `TECHNICAL_NOTE_V2.md` for architecture, performance targets, and developmen
 ## Requirements
 
 - Python 3.11+
-- Android emulator with ADB (LDPlayer / MEmu / BlueStacks)
+- Windows PC with Rise of Kingdoms PC client
 - (Optional) CUDA for GPU inference
 
 ## License

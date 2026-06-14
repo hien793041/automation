@@ -20,8 +20,8 @@ from loguru import logger
 
 from rokbot.actions.base_action import BaseAction
 from rokbot.core.config import BotConfig
-from rokbot.vision.template_matcher import TemplateMatcher
 from rokbot.utils.map_navigation import MapNavigationMixin
+from rokbot.vision.template_matcher import TemplateMatcher
 
 if TYPE_CHECKING:
     from rokbot.core.state_machine import StateMachine
@@ -52,6 +52,7 @@ class RallyFortAction(BaseAction, MapNavigationMixin):
     def __init__(self, config: BotConfig, state_machine: Optional["StateMachine"] = None):
         super().__init__(config, state_machine)
         self._last_failed_at: Optional[float] = None
+        self.MAX_ACTIVE_TROOPS = self.get_action_config("max_troops", 4)
         self._matcher = TemplateMatcher(
             templates_dir=self.TEMPLATES_DIR,
             threshold=0.75,
@@ -174,8 +175,14 @@ class RallyFortAction(BaseAction, MapNavigationMixin):
             cx, cy = self.random_point_in_bbox(btn.bbox, jitter_sigma=1.0, edge_margin=2)
             cx += roi_x1
             cy += roi_y1
-            logger.info(f"[RallyFort] Clicking enter_city_icon at ({cx}, {cy})")
-            self.state_machine.pc_input.tap(cx, cy)
+
+            # Humanization: randomly use the Space hotkey instead of clicking.
+            if self._use_hotkey_for_city_toggle():
+                logger.info("[RallyFort] Entering city via Space hotkey")
+                self.state_machine.pc_input.press_key("space")
+            else:
+                logger.info(f"[RallyFort] Clicking enter_city_icon at ({cx}, {cy})")
+                self.state_machine.pc_input.tap(cx, cy)
             self.human_delay("transition_wait", fallback_seconds=4.0)
 
             # Re-check
