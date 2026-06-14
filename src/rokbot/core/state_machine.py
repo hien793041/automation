@@ -65,6 +65,7 @@ class StateMachine:
         self._timing: Optional[TimingEngine] = None
         self._capture_fail_count = 0
         self._max_capture_failures = 3
+        self._action_fail_counts: dict[str, int] = {}
         if config.humanization.enabled:
             self._timing = TimingEngine(
                 profile_path=config.humanization.profile_path,
@@ -196,7 +197,12 @@ class StateMachine:
         self._evaluate_and_execute_actions()
 
     def _evaluate_and_execute_actions(self) -> None:
-        """Run through enabled actions in priority order and execute the first available one."""
+        """Run through enabled actions in priority order and execute the first available one.
+
+        Each action is retried up to ``max_retry_attempts`` before the state
+        machine gives up and stops, so transient UI glitches don't immediately
+        kill a long-running session.
+        """
         for action_name in self._get_action_priority_order():
             action = self._actions[action_name]
             try:
@@ -206,13 +212,38 @@ class StateMachine:
                     if success:
                         action.on_success()
                         self.context.reset_stuck_timer()
-                    else:
-                        action.on_failure("Execution returned False")
+                        self._action_fail_counts.pop(action_name, None)
+                        # Only run one action per tick
+                        break
+
+                    action.on_failure("Execution returned False")
+                    fails = self._action_fail_counts.get(action_name, 0) + 1
+                    self._action_fail_counts[action_name] = fails
+                    logger.warning(
+                        f"Action {action_name} failed ({fails}/{self.config.max_retry_attempts})"
+                    )
+                    if fails >= self.config.max_retry_attempts:
+                        logger.error(
+                            f"Action {action_name} exceeded max retries — stopping state machine"
+                        )
+                        self.stop()
                     # Only run one action per tick
                     break
             except Exception as e:
                 logger.exception(f"Action {action_name} failed: {e}")
                 action.on_failure(str(e))
+                fails = self._action_fail_counts.get(action_name, 0) + 1
+                self._action_fail_counts[action_name] = fails
+                logger.warning(
+                    f"Action {action_name} raised exception ({fails}/{self.config.max_retry_attempts})"
+                )
+                if fails >= self.config.max_retry_attempts:
+                    logger.error(
+                        f"Action {action_name} exceeded max retries — stopping state machine"
+                    )
+                    self.stop()
+                # Only run one action per tick
+                break
 
     def _dismiss_overlays(self) -> bool:
         """Close chat/guide windows if detected.

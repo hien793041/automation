@@ -372,23 +372,26 @@ class PCInput:
         current = pyautogui.position()
         cx, cy = current.x, current.y
         mid_x = left + width // 2
-        top_band = top + int(height * 0.20)
-        bottom_band = bottom - int(height * 0.20)
+        top_band = top + int(height * 0.125)
+        bottom_band = bottom - int(height * 0.25)
         left_band = left + int(width * 0.20)
         right_band = right - int(width * 0.20)
 
         if cy <= top_band or (cy >= bottom_band and cx <= mid_x):
-            # Safe zones: top edge or bottom-left half.
-            bypass_prob = 0.80
+            # Cursor already rests in a safe area (top edge or bottom-left half).
+            # For long-running sessions we avoid micro-adjustments here almost
+            # all of the time; only occasionally nudge it to look alive.
+            bypass_prob = 0.95
         elif cx <= left_band or cx >= right_band or (cy >= bottom_band and cx > mid_x):
-            # Less safe: left/right edges or bottom-right half.
-            bypass_prob = 0.20
+            # Cursor is on a side edge or bottom-right: it may still cover UI,
+            # so move it away more reliably.
+            bypass_prob = 0.0
         else:
-            # Center area: almost always move.
+            # Center area: almost always move to avoid covering important UI.
             bypass_prob = 0.0
 
         if self._humanization_enabled and random.random() < bypass_prob:
-            logger.debug(f"Skipping safe-zone move: cursor in low-priority zone (bypass {bypass_prob:.0%})")
+            logger.debug(f"Skipping safe-zone move: cursor already safe (bypass {bypass_prob:.0%})")
             self._last_safe_zone_move_time = now
             return
 
