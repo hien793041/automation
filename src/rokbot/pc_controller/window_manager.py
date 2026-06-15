@@ -50,7 +50,15 @@ class WindowManager:
         try:
             win32gui.EnumWindows(callback, None)
         except Exception as e:
-            logger.warning(f"EnumWindows error: {e}")
+            # win32gui raises error 18 (ERROR_NO_MORE_FILES) when the callback
+            # returns False to stop enumeration early. This is expected behavior,
+            # not a real error.
+            import win32api
+
+            if getattr(e, "winerror", None) == win32api.ERROR_NO_MORE_FILES:
+                logger.debug("EnumWindows stopped early (window found)")
+            else:
+                logger.warning(f"EnumWindows error: {e}")
 
         if self.hwnd is None:
             logger.warning(

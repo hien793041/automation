@@ -122,18 +122,32 @@ def main() -> int:
     if args.dry_run:
         logger.info("DRY RUN mode enabled - no inputs will be executed")
 
-    # Initialize PC controller
+    # Initialize PC controller for the main game window.
+    # Some actions (e.g. clone_farm) manage their own windows, so the main
+    # window is optional when only those actions are selected.
     window_title = config.pc.window_title
     window_manager = WindowManager(window_title_substring=window_title)
-    if not window_manager.is_window_valid():
-        logger.error(
-            f"Game window not found (looking for '{window_title}').\n"
-            "Please launch Rise of Kingdoms first."
-        )
-        return 1
+    if window_manager.is_window_valid():
+        screen_capture = WindowCapture(window_manager)
+        pc_input = PCInput(window_manager, humanization_config=config.humanization)
+        logger.info(f"Main game window found: '{window_title}'")
+    else:
+        self_managed_actions = {"clone_farm"}
+        selected = set(selected_actions)
+        if selected and selected.issubset(self_managed_actions):
+            logger.warning(
+                f"Main game window not found (looking for '{window_title}').\n"
+                f"Running self-managed actions only: {selected_actions}"
+            )
+            screen_capture = None
+            pc_input = None
+        else:
+            logger.error(
+                f"Game window not found (looking for '{window_title}').\n"
+                "Please launch Rise of Kingdoms first, or run only self-managed actions."
+            )
+            return 1
 
-    screen_capture = WindowCapture(window_manager)
-    pc_input = PCInput(window_manager, humanization_config=config.humanization)
     ocr_engine = OCREngine(lang=config.vision.ocr_lang)
 
     # Initialize and start state machine

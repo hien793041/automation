@@ -7,6 +7,7 @@ from loguru import logger
 from rokbot.actions.alliance_help_action import AllianceHelpAction
 from rokbot.actions.barbarian_attack_action import BarbarianAttackAction
 from rokbot.actions.base_action import BaseAction
+from rokbot.actions.clone_farm import CloneFarmAction
 from rokbot.actions.gather_action import GatherAction
 from rokbot.actions.gather_gem_action import GatherGemAction
 from rokbot.actions.rally_fort_action import RallyFortAction
@@ -35,13 +36,15 @@ class ActionFactory:
         "scout_cave_low": ScoutCaveLowAction,
         "train_troops": TrainTroopsAction,
         "rally_fort": RallyFortAction,
-
         "villager_help": VillagerHelpAction,
         "reconnect": ReconnectAction,
+        "clone_farm": CloneFarmAction,
     }
 
     @classmethod
-    def create(cls, action_name: str, config: BotConfig, state_machine: Optional["StateMachine"]) -> Optional[BaseAction]:
+    def create(
+        cls, action_name: str, config: BotConfig, state_machine: Optional["StateMachine"]
+    ) -> Optional[BaseAction]:
         """Create an action instance by name (built-in or user combo)."""
         action_class = cls._registry.get(action_name)
         if action_class is not None:
@@ -69,4 +72,5 @@ class ActionFactory:
     def list_actions(cls) -> list:
         """List all registered action and combo names."""
         from rokbot.actions.combo_loader import ComboLoader
+
         return list(cls._registry.keys()) + ComboLoader.list_combos()
