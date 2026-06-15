@@ -24,11 +24,12 @@ class GatherAction(BaseAction, MapNavigationMixin):
 
     CITY_ICON_ROI_RATIO: Tuple[float, float, float, float] = (0.75, 0.75, 1.0, 1.0)
     # RESOURCE_ICONS = ["corn_icon", "wood_icon", "stone_icon", "gold_icon"]
-    RESOURCE_ICONS = ["corn_icon", "wood_icon", "stone_icon"]
+    RESOURCE_ICONS = ["corn_icon"]
 
     # Stop gathering when this many troops are already active
     MAX_ACTIVE_TROOPS = 4
     TROOP_STATUS_TEMPLATES = ["gathering", "backing", "moving", "building", "attacking", "attacking1"]
+    NEW_TROOP_TEMPLATES = ["new_troop", "new_troop1", "new_troop2"]
 
     def __init__(self, config: BotConfig, state_machine: Optional["StateMachine"] = None):
         super().__init__(config, state_machine)
@@ -249,16 +250,31 @@ class GatherAction(BaseAction, MapNavigationMixin):
         self.state_machine.pc_input.tap(gx, gy)
         self.human_delay("click_interval", fallback_seconds=1.5)
 
-        # 5. Tap New Troop
-        self.state_machine.pc_input.move_to_safe_zone()
-        self.pre_action_delay()
-        new_troop_image = self.state_machine.screen_capture.capture()
-        if new_troop_image is None:
-            return False
-        new_matches = self._matcher.match(new_troop_image, template_name="new_troop", threshold=0.75)
+        # 5. Tap New Troop (retry up to 3 times before giving up)
+        new_matches: list = []
+        for attempt in range(1, 4):
+            self.state_machine.pc_input.move_to_safe_zone()
+            self.pre_action_delay()
+            new_troop_image = self.state_machine.screen_capture.capture()
+            if new_troop_image is not None:
+                for nt_name in self.NEW_TROOP_TEMPLATES:
+                    matches = self._matcher.match(new_troop_image, template_name=nt_name, threshold=0.75)
+                    if matches:
+                        new_matches.extend(matches)
+                        logger.debug(f"[Gather] {nt_name}: found {len(matches)} match(es)")
+            if new_matches:
+                break
+            logger.warning(f"[Gather] new_troop variants not found (attempt {attempt}/3)")
+            if attempt < 3:
+                self.human_delay("menu_wait", fallback_seconds=1.5)
+
         if not new_matches:
-            logger.info("[Gather] new_troop not found")
+            logger.warning("[Gather] new_troop variants not found after 3 attempts — pressing ESC")
+            if self.state_machine.pc_input is not None:
+                self.state_machine.pc_input.key_back()
+                self.human_delay("post_error_wait", fallback_seconds=1.5)
             return False
+
         new_btn = max(new_matches, key=lambda m: m.confidence)
         nx, ny = self.random_point_in_bbox(new_btn.bbox, jitter_sigma=1.0, edge_margin=2)
         logger.info(f"[Gather] Step 5/6: Tapping 'New Troop' at ({nx}, {ny})")

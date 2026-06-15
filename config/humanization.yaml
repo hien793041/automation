@@ -7,7 +7,7 @@ timing:
   click_interval:
     type: log_normal
     shape: 0.8
-    scale: 1.2
+    scale: 1.8
   decision_time:
     type: gaussian
     mu: 600.0
@@ -18,12 +18,12 @@ timing:
   # Delays for common bot workflows
   transition_wait:
     type: gaussian
-    mu: 1800.0
-    sigma: 400.0
+    mu: 2500.0
+    sigma: 500.0
   menu_wait:
     type: gaussian
-    mu: 1200.0
-    sigma: 300.0
+    mu: 1800.0
+    sigma: 400.0
   post_error_wait:
     type: gaussian
     mu: 2500.0

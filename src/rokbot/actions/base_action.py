@@ -68,7 +68,7 @@ class BaseAction(ABC):
         self,
         distribution: str = "click_interval",
         fallback_seconds: float = 0.5,
-        min_seconds: float = 0.05,
+        min_seconds: float = 0.2,
     ) -> None:
         """Sleep using the configured human timing distribution.
 
